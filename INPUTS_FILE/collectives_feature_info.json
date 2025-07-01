@@ -1,0 +1,27 @@
+{
+  "name": "PyTorch Collective Operations",
+  "description": "Collective operations in PyTorch are distributed communication primitives that enable efficient data exchange between processes in a distributed setting. They're essential for parallel and distributed training of deep learning models, allowing processes to coordinate and share information efficiently.",
+  "api": [
+    "torch.distributed.all_reduce, torch.distributed.broadcast, torch.distributed.gather, torch.distributed.scatter, torch.distributed.all_to_all"
+    ],
+  "examples": [
+    "# All-reduce example (sum operation)\nimport torch.distributed as dist\ndist.init_process_group(backend='gloo')\ntensor = torch.ones(10)\ndist.all_reduce(tensor, op=dist.ReduceOp.SUM)\n# After this, all processes have tensor with value equal to world_size"
+  ],
+  "requirements": {
+    "test_requirements": [
+        "For every collective generate 1. tests that check performance using torch_profiler 2. edge case tests  3. functional tests 4. zero size tensor tests. \n There should be 1 implementation file for each collective and all types of tests should be in it. "
+    ],
+    "functional_requirements": [
+      "All collective operations should work correctly with various tensor shapes and sizes",
+      "Tests should support different data types (float32, float16, int64, etc.)",
+      "Tests should work with both CPU and GPU tensors",
+      "Tests should handle edge cases like empty tensors and single-element tensors",
+      "Operations should properly synchronize processes"
+    ],
+    "performance_requirements": [
+      "Operations should scale efficiently with increasing world size",
+      "Operations should minimize memory overhead",
+      "Operations should properly utilize available bandwidth"
+    ]
+  }
+}

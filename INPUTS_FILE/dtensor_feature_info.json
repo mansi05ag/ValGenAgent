@@ -1,0 +1,45 @@
+{
+  "name": "DTensor",
+  "description": "PyTorch DTensor (Distributed Tensor) is a distributed tensor abstraction that enables tensor parallelism across multiple devices. It allows users to shard tensors across multiple processes and perform operations on these tensors transparently. DTensor is part of PyTorch's distributed computing capabilities and is crucial for large-scale model training and inference.",
+  "api": "import torch\nfrom torch.distributed._tensor import DeviceMesh, Shard, Replicate, distribute_tensor\n\n# Create a device mesh\ndevice_mesh = DeviceMesh('cuda', list(range(world_size)))\n\n# Distribute a tensor\ntensor = torch.randn(8, 16)\ndist_tensor = distribute_tensor(tensor, device_mesh, [Shard(0)])\n\n# DTensor can be used in regular PyTorch operations\nresult = dist_tensor + dist_tensor",
+  "examples": "# Example 1: Creating a DTensor with 1D sharding\ndevice_mesh = DeviceMesh('cpu', list(range(world_size)))\ntensor = torch.randn(8, 16)\ndist_tensor = distribute_tensor(tensor, device_mesh, [Shard(0)])\n\n# Example 2: Creating a DTensor with replication\ndevice_mesh = DeviceMesh('cpu', list(range(world_size)))\ntensor = torch.randn(8, 16)\ndist_tensor = distribute_tensor(tensor, device_mesh, [Replicate()])\n\n# Example 3: Creating a DTensor with 2D mesh\ndevice_mesh = DeviceMesh('cpu', torch.arange(world_size).reshape(2, 2))\ntensor = torch.randn(8, 16)\ndist_tensor = distribute_tensor(tensor, device_mesh, [Shard(0), Shard(1)])",
+  "requirements": {
+    "world_sizes": [1, 2, 4, 8],
+    "data_types": ["float32", "float16", "bfloat16", "int32", "int64"],
+    "device": "cpu",
+    "configurations": [
+      {
+        "type": "initialization",
+        "description": "Test DTensor initialization with different sharding strategies"
+      },
+      {
+        "type": "operations",
+        "description": "Test basic mathematical operations on DTensor"
+      },
+      {
+        "type": "resharding",
+        "description": "Test resharding capabilities between different distributions"
+      },
+      {
+        "type": "model_integration",
+        "description": "Test integration with PyTorch modules and models"
+      }
+    ],
+    "validation_approach": [
+      "Validate tensor values match between distributed and non-distributed versions",
+      "Validate correct placement of tensor chunks across specified devices",
+      "Test both dummy tensors and actual model forward/backward passes",
+      "Verify memory efficiency with increasing world sizes"
+    ],
+    "models": [
+      {
+        "name": "Simple MLP",
+        "description": "Basic multi-layer perceptron for testing forward/backward with DTensor"
+      },
+      {
+        "name": "Small Transformer",
+        "description": "Small transformer model to test more complex DTensor integration"
+      }
+    ]
+  }
+}

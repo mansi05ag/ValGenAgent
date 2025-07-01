@@ -1,0 +1,57 @@
+{
+  "name": "Pipeline Parallelism",
+  "description": "PyTorch Pipeline Parallelism is a distributed training technique that splits model layers across multiple devices, with each device processing a subset of the model in a pipelined fashion. This approach helps in training large models that don't fit on a single device and can improve training efficiency by allowing concurrent computation on different pipeline stages.",
+  "api": "import torch\nimport torch.nn as nn\nfrom torch.distributed.pipeline.sync import Pipe\n\n# Define a model\nmodel = nn.Sequential(\n    nn.Linear(100, 1000),\n    nn.ReLU(),\n    nn.Linear(1000, 100),\n    nn.ReLU(),\n    nn.Linear(100, 10)\n)\n\n# Split the model for pipeline parallelism\nmodel = Pipe(model, chunks=8)\n\n# Forward and backward pass\ninput = torch.randn(16, 100)\noutput = model(input)\nloss = output.sum()\nloss.backward()",
+  "examples": "# Example 1: Basic pipeline parallelism with a sequential model\nimport torch\nimport torch.nn as nn\nfrom torch.distributed.pipeline.sync import Pipe\n\ntorch.distributed.init_process_group('gloo')\nmodel = nn.Sequential(\n    nn.Linear(100, 100),\n    nn.ReLU(),\n    nn.Linear(100, 10)\n)\nmodel = Pipe(model, chunks=8)\ninputs = torch.randn(16, 100)\noutputs = model(inputs)\n\n# Example 2: Pipeline parallelism with custom module splitting\nimport torch.distributed as dist\nfrom torch.distributed.pipeline.sync import Pipe\n\ndist.init_process_group('gloo')\ndevices = [torch.device('cpu')] * 2  # Simulate multiple devices on CPU\npartitions = torch.nn.ModuleList([\n    torch.nn.Sequential(nn.Linear(100, 50), nn.ReLU()),\n    torch.nn.Sequential(nn.Linear(50, 10))\n])\nfor i, module in enumerate(partitions):\n    module.to(devices[i % len(devices)])\n\npipe = Pipe(partitions, chunks=4)",
+  "requirements": {
+    "world_sizes": [2, 4, 8],
+    "data_types": ["float32", "float16", "bfloat16", "int32", "int64"],
+    "device": "cpu",
+    "configurations": [
+      {
+        "type": "model_splitting",
+        "description": "Test different ways of splitting models across pipeline stages"
+      },
+      {
+        "type": "micro_batch_size",
+        "description": "Test various micro-batch sizes (chunks) for pipeline efficiency"
+      },
+      {
+        "type": "checkpointing",
+        "description": "Test activation checkpointing to reduce memory usage"
+      },
+      {
+        "type": "custom_models",
+        "description": "Test with custom models beyond simple sequential models"
+      }
+    ],
+    "validation_approach": [
+      "Verify model output correctness compared to non-pipelined execution",
+      "Measure memory usage across different world sizes and model splits",
+      "Test forward and backward pass functionality",
+      "Validate gradient correctness across pipeline stages",
+      "Measure throughput with different micro-batch sizes",
+      "Evaluate how different data types affect performance and memory usage"
+    ],
+    "models": [
+      {
+        "name": "Sequential MLP",
+        "description": "Multi-layer perceptron with sequential architecture for basic pipeline testing"
+      },
+      {
+        "name": "Transformer Encoder",
+        "description": "Transformer encoder model for testing more complex pipeline configurations"
+      },
+      {
+        "name": "ResNet",
+        "description": "ResNet model with skip connections for testing complex pipeline dataflow"
+      },
+      {
+        "name": "LSTM",
+        "description": "LSTM model for testing pipeline parallelism with recurrent networks"
+      }
+    ],
+    "micro_batch_sizes": [1, 2, 4, 8, 16],
+    "batch_sizes": [16, 32, 64]
+  }
+}
