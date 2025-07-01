@@ -1,0 +1,419 @@
+{
+  "feature_name": "collectives",
+  "test_categories": [
+    {
+      "name": "Functional Correctness",
+      "description": "Tests to ensure the core functionality of torch.distributed.all_reduce operates as expected under various valid conditions, covering different operations, tensor shapes, and world sizes.",
+      "test_cases": [
+        {
+          "id": "TC_AR_FUNC_001",
+          "title": "Basic All-Reduce (SUM op)",
+          "description": "Verify all_reduce with the default SUM operation across multiple processes using a simple tensor setup.",
+          "steps": [
+            "Initialize the distributed process group (e.g., `dist.init_process_group`).",
+            "On each rank `r` (from 0 to `world_size - 1`), create a tensor `t_r` initialized with values based on `rank_id` (e.g., `torch.ones(10) * rank_id`).",
+            "Perform `dist.all_reduce(t_r, op=dist.ReduceOp.SUM)`.",
+            "After the operation, verify that the resulting `t_r` on each rank is equal to the sum of all initial `t_i` tensors across all ranks (i.e., `sum(torch.ones(10) * i for i in range(world_size))`)."
+          ],
+          "expected_results": "All tensors on all ranks should contain the element-wise sum of original values from all ranks.",
+          "data_types": [
+            "torch.float32",
+            "torch.float16",
+            "torch.float64",
+            "torch.int32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_FUNC_002",
+          "title": "All-Reduce with AVG op",
+          "description": "Verify all_reduce with the AVG (average) operation for floating-point tensors.",
+          "steps": [
+            "Initialize the distributed process group.",
+            "On each rank `r`, create a tensor `t_r`.",
+            "Perform `dist.all_reduce(t_r, op=dist.ReduceOp.AVG)`.",
+            "Verify that the resulting `t_r` on each rank equals the element-wise average of initial `t_i` tensors from all ranks (i.e., `sum(initial_t_i) / world_size`)."
+          ],
+          "expected_results": "All tensors on all ranks should contain the element-wise average of original values from all ranks.",
+          "data_types": [
+            "torch.float32",
+            "torch.float16",
+            "torch.float64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_FUNC_003",
+          "title": "All-Reduce with MIN/MAX/PRODUCT ops",
+          "description": "Verify all_reduce with MIN, MAX, and PRODUCT operations.",
+          "steps": [
+            "Initialize the distributed process group.",
+            "On each rank, create tensors with varied values to ensure distinct min/max/product outcomes across ranks.",
+            "Perform `dist.all_reduce(tensor_min, op=dist.ReduceOp.MIN)` and verify the minimum value.",
+            "Perform `dist.all_reduce(tensor_max, op=dist.ReduceOp.MAX)` and verify the maximum value.",
+            "Perform `dist.all_reduce(tensor_prod, op=dist.ReduceOp.PRODUCT)` and verify the product.",
+            "For verification, compute the expected result locally by gathering all initial tensors (conceptually, not actually gathering for the test) and applying the operation."
+          ],
+          "expected_results": "Tensors should correctly contain the element-wise minimum, maximum, or product of original values from all ranks.",
+          "data_types": [
+            "torch.float32",
+            "torch.float16",
+            "torch.float64",
+            "torch.int32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_FUNC_004",
+          "title": "All-Reduce with various tensor shapes",
+          "description": "Test all_reduce with 1D, 2D, and 3D tensors of different sizes to ensure shape handling correctness.",
+          "steps": [
+            "Initialize the distributed process group.",
+            "On each rank, create tensors of varying shapes: e.g., `(10,)`, `(5, 5)`, `(2, 3, 4)`.",
+            "For each shape, initialize with unique values per rank and perform `dist.all_reduce` with `SUM` op.",
+            "Verify the correctness by comparing the result with a locally computed sum for each shape.",
+            "Ensure the output tensor maintains its original shape."
+          ],
+          "expected_results": "All_reduce should correctly perform the reduction on tensors of different dimensions and maintain their original shapes.",
+          "data_types": [
+            "torch.float32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_FUNC_005",
+          "title": "All-Reduce with different world sizes",
+          "description": "Test all_reduce's functionality and consistency when executed with varying numbers of participating processes (world sizes).",
+          "steps": [
+            "Execute the test script with `WORLD_SIZE` environment variable set to different values: 2, 3, 4, and a larger value (e.g., 8 or 16).",
+            "On each rank for each world size, create a tensor and perform `dist.all_reduce(op=dist.ReduceOp.SUM)`.",
+            "Verify the result for each world size, ensuring the sum correctly reflects the `WORLD_SIZE` value used for that run.",
+            "Ensure all ranks participate and synchronize correctly."
+          ],
+          "expected_results": "All_reduce should function correctly and produce accurate results regardless of the number of participating processes.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    },
+    {
+      "name": "Data Type Compatibility",
+      "description": "Tests to ensure all_reduce works correctly across various numerical data types supported by PyTorch, including precision and overflow/underflow handling.",
+      "test_cases": [
+        {
+          "id": "TC_AR_DT_001",
+          "title": "All-Reduce with Float16 (Half precision)",
+          "description": "Verify all_reduce functionality and precision with `torch.float16` tensors, especially focusing on potential precision loss or range issues.",
+          "steps": [
+            "Initialize the process group.",
+            "Create `torch.float16` tensors on each rank with values that allow for precision checks (e.g., values that might sum to a denormal number, or large numbers summing to infinity).",
+            "Perform `dist.all_reduce(tensor, op=dist.ReduceOp.SUM)`.",
+            "Verify the result against expected values, carefully considering the inherent precision limits of `float16`.",
+            "Repeat for MIN/MAX/PRODUCT operations, and cautiously for AVG (as `float16` can have precision challenges with division)."
+          ],
+          "expected_results": "All_reduce should compute correctly for `float16` tensors within expected precision limits, handling underflow/overflow as per IEEE 754 standard.",
+          "data_types": [
+            "torch.float16"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_DT_002",
+          "title": "All-Reduce with Integer types (Int32, Int64)",
+          "description": "Verify all_reduce functionality with `torch.int32` and `torch.int64` tensors for supported operations (SUM, MIN, MAX, PRODUCT).",
+          "steps": [
+            "Initialize the process group.",
+            "Create `torch.int32` and `torch.int64` tensors with varied integer values on each rank.",
+            "Perform `dist.all_reduce` with `SUM`, `MIN`, `MAX`, `PRODUCT` operations.",
+            "Verify results match exact integer calculations.",
+            "Attempt `dist.all_reduce` with `AVG` op on an integer tensor and assert that an error (e.g., `RuntimeError`) is raised, as AVG is typically not supported for integer types."
+          ],
+          "expected_results": "All_reduce should compute correctly for integer tensors for supported operations. An error should be raised for unsupported operations like AVG.",
+          "data_types": [
+            "torch.int32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    },
+    {
+      "name": "Device Compatibility",
+      "description": "Tests to ensure all_reduce functions correctly on both CPU and GPU (CUDA) devices, adapting to the available hardware and chosen backend.",
+      "test_cases": [
+        {
+          "id": "TC_AR_DEV_001",
+          "title": "All-Reduce on CPU Tensors (Gloo Backend)",
+          "description": "Verify all_reduce using CPU tensors, typically with the Gloo backend, ensuring correct cross-process communication.",
+          "steps": [
+            "Initialize the process group with `backend='gloo'`.",
+            "On each rank, create tensors on CPU (`torch.ones(10, device='cpu')`).",
+            "Perform `dist.all_reduce` with various operations (SUM, AVG, MIN, MAX, PRODUCT).",
+            "Verify results match expected CPU calculations."
+          ],
+          "expected_results": "All_reduce should function correctly for CPU tensors, producing accurate results.",
+          "data_types": [
+            "torch.float32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_DEV_002",
+          "title": "All-Reduce on GPU Tensors (NCCL Backend)",
+          "description": "Verify all_reduce using GPU tensors, typically with the NCCL backend, ensuring efficient and correct GPU-to-GPU communication. Requires CUDA-enabled environment.",
+          "steps": [
+            "Check for CUDA availability (`torch.cuda.is_available()`). Skip test if not available.",
+            "Initialize the process group with `backend='nccl'`.",
+            "On each rank, create tensors on the respective GPU device (`torch.ones(10, device='cuda:rank_id')`).",
+            "Perform `dist.all_reduce` with various operations (SUM, AVG, MIN, MAX, PRODUCT).",
+            "Verify results match expected calculations, ensuring data integrity across GPUs."
+          ],
+          "expected_results": "All_reduce should function correctly and efficiently for GPU tensors, producing accurate results.",
+          "data_types": [
+            "torch.float32",
+            "torch.float16"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    },
+    {
+      "name": "Edge Case Handling",
+      "description": "Tests to verify the behavior of all_reduce under unusual or boundary input conditions, ensuring robustness and predictable behavior.",
+      "test_cases": [
+        {
+          "id": "TC_AR_EDGE_001",
+          "title": "All-Reduce with single-element tensors",
+          "description": "Test all_reduce with tensors containing only one element to ensure scalar operations are handled correctly.",
+          "steps": [
+            "Initialize the process group.",
+            "On each rank, create a `torch.tensor([value])`.",
+            "Perform `dist.all_reduce` with SUM, MIN, MAX, PRODUCT, AVG operations.",
+            "Verify results against simple scalar calculations of the same operation."
+          ],
+          "expected_results": "All_reduce should correctly compute results for single-element tensors for all supported operations.",
+          "data_types": [
+            "torch.float32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_EDGE_002",
+          "title": "All-Reduce with empty tensors",
+          "description": "Test all_reduce with tensors that have a size of 0 (e.g., `torch.empty(0)`).",
+          "steps": [
+            "Initialize the process group.",
+            "On each rank, create an empty tensor (`torch.empty(0)` or `torch.zeros(0)`).",
+            "Perform `dist.all_reduce(empty_tensor)`.",
+            "Verify that the operation completes without error, the tensor remains empty, and it is effectively a no-op.",
+            "Confirm no synchronization issues arise from empty tensor calls."
+          ],
+          "expected_results": "Operation should complete successfully without modifying the empty tensor or raising an error. It should behave as a no-op.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_EDGE_003",
+          "title": "All-Reduce with NaN/Inf values",
+          "description": "Test how all_reduce handles tensors containing Not-a-Number (NaN) or Infinity (Inf) values according to IEEE 754 floating-point rules.",
+          "steps": [
+            "Initialize the process group.",
+            "On various ranks, create tensors containing combinations of `float('inf')`, `float('-inf')`, and `float('nan')`.",
+            "Perform `dist.all_reduce` with SUM, MIN, MAX, PRODUCT operations.",
+            "Verify results rigorously against IEEE 754 standards (e.g., NaN propagates for SUM/PRODUCT, specific rules for min/max with +/- Inf and NaN)."
+          ],
+          "expected_results": "Results should precisely follow IEEE 754 standards for NaN/Inf propagation and comparisons.",
+          "data_types": [
+            "torch.float32",
+            "torch.float64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_EDGE_004",
+          "title": "All-Reduce with very large/small values",
+          "description": "Test all_reduce with tensors containing values close to the limits of their data type to check for correct overflow/underflow handling or precision issues.",
+          "steps": [
+            "Initialize the process group.",
+            "On each rank, create tensors with values like `torch.finfo(dtype).max`, `torch.finfo(dtype).min`, or very small denormal numbers.",
+            "Perform `dist.all_reduce` (especially SUM and PRODUCT) and verify results.",
+            "Specifically check for precision loss when summing very small numbers with very large numbers, or when products lead to overflow/underflow."
+          ],
+          "expected_results": "Results should be accurate within the limits of the data type; overflow/underflow should be handled gracefully (e.g., becoming Inf or 0, or saturating) and precision maintained where possible.",
+          "data_types": [
+            "torch.float32",
+            "torch.float16",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    },
+    {
+      "name": "Concurrency and Synchronization",
+      "description": "Tests to ensure proper synchronization of processes during collective operations, verifying that calls block or complete correctly without deadlocks.",
+      "test_cases": [
+        {
+          "id": "TC_AR_SYNC_001",
+          "title": "Sequential All-Reduce operations",
+          "description": "Verify that multiple `all_reduce` calls can be performed sequentially on different tensors without deadlocks or incorrect results.",
+          "steps": [
+            "Initialize the process group.",
+            "On each rank, create tensor A and tensor B.",
+            "Perform `dist.all_reduce(tensor_A)`.",
+            "Perform `dist.all_reduce(tensor_B)` immediately after the first call completes.",
+            "Verify both operations yield correct results on their respective tensors.",
+            "Ensure no operations block indefinitely or produce stale results."
+          ],
+          "expected_results": "All sequential collective operations should complete successfully and correctly, demonstrating proper internal synchronization and state management.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    },
+    {
+      "name": "Error Handling",
+      "description": "Tests to ensure that `all_reduce` handles invalid inputs or unsupported configurations gracefully by raising appropriate, informative errors.",
+      "test_cases": [
+        {
+          "id": "TC_AR_ERR_001",
+          "title": "Invalid reduction operation",
+          "description": "Test calling `all_reduce` with an invalid or unsupported reduction operation enum value or type.",
+          "steps": [
+            "Initialize the process group.",
+            "Create a tensor.",
+            "Attempt to call `dist.all_reduce(tensor, op='INVALID_OP_STRING')` or `dist.all_reduce(tensor, op=999)` (an invalid integer value).",
+            "Verify that a `ValueError` or `TypeError` is raised indicating an invalid or unsupported operation.",
+            "Test also with valid but non-`ReduceOp` object (e.g., `op=1` instead of `ReduceOp.SUM`)."
+          ],
+          "expected_results": "An error (e.g., `ValueError`, `TypeError`, or `RuntimeError` depending on PyTorch's specific error handling for this) should be raised indicating an invalid reduction operation.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_ERR_002",
+          "title": "Unsupported data type for operation",
+          "description": "Test calling `all_reduce` with a data type that is semantically not supported for a specific operation (e.g., AVG on integer types).",
+          "steps": [
+            "Initialize the process group.",
+            "Create an `int` tensor (e.g., `torch.zeros(5, dtype=torch.int32)`).",
+            "Attempt to call `dist.all_reduce(int_tensor, op=dist.ReduceOp.AVG)`.",
+            "Verify that an error is raised (e.g., `RuntimeError` or `ValueError`) indicating that AVG is not supported for integer types."
+          ],
+          "expected_results": "An error should be raised indicating the unsupported data type for the given operation (e.g., `AVG` on integer tensors).",
+          "data_types": [
+            "torch.int32",
+            "torch.int64"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_ERR_003",
+          "title": "Uninitialized process group",
+          "description": "Test calling `all_reduce` without first initializing the distributed process group, which should lead to a clear error.",
+          "steps": [
+            "Ensure `dist.init_process_group` has NOT been called.",
+            "Attempt to call `dist.all_reduce(tensor)` with any valid tensor.",
+            "Verify that a `RuntimeError` or similar error is raised, clearly indicating that the distributed environment is not initialized or available."
+          ],
+          "expected_results": "A `RuntimeError` indicating an uninitialized process group or distributed environment should be raised.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_ERR_004",
+          "title": "Mismatched tensor shapes/sizes across ranks",
+          "description": "Test `all_reduce` with tensors that have different shapes or sizes on different ranks, which should typically result in an error.",
+          "steps": [
+            "Initialize the process group.",
+            "On rank 0, create `torch.ones(10)`.",
+            "On rank 1, create `torch.ones(5)` (different size).",
+            "On rank 2, create `torch.ones(2, 5)` (different shape).",
+            "Attempt to call `dist.all_reduce` on these mismatched tensors.",
+            "Verify that a `RuntimeError` or similar error indicating tensor size/shape mismatch is raised across all participating ranks."
+          ],
+          "expected_results": "A `RuntimeError` or assertion failure should occur, indicating that input tensors have mismatched shapes or sizes across ranks.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    },
+    {
+      "name": "Performance Considerations",
+      "description": "Guidelines and high-level test cases for performance benchmarking and scalability analysis of `all_reduce` across different tensor sizes, world sizes, and hardware configurations.",
+      "test_cases": [
+        {
+          "id": "TC_AR_PERF_001",
+          "title": "Latency Measurement Across Tensor Sizes",
+          "description": "Measure the average time taken for `all_reduce` for a range of tensor sizes to characterize latency behavior.",
+          "steps": [
+            "Initialize the process group (using both Gloo and NCCL if applicable).",
+            "For a spectrum of tensor sizes (e.g., 1KB, 10KB, 100KB, 1MB, 10MB, 100MB, 1GB, up to system limits):",
+            "  On each rank, create a tensor of the specific size.",
+            "  Execute `dist.barrier()` to ensure all ranks are synchronized.",
+            "  Start a high-resolution timer.",
+            "  Perform `dist.all_reduce(tensor, op=dist.ReduceOp.SUM)`.",
+            "  Execute `dist.barrier()` to wait for completion.",
+            "  Stop the timer.",
+            "  Record the elapsed time for each rank. Report average, min, and max latency across ranks."
+          ],
+          "expected_results": "Detailed performance metrics (latency in ms/us) recorded for various tensor sizes. Latency is expected to increase with tensor size, but should show optimized communication patterns (e.g., logarithmic for NCCL on GPUs for smaller sizes, then bandwidth-limited).",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_PERF_002",
+          "title": "Throughput Measurement",
+          "description": "Estimate the effective data transfer throughput of `all_reduce` based on tensor size and measured time.",
+          "steps": [
+            "Leverage data from TC_AR_PERF_001.",
+            "Calculate throughput as (Tensor Size * World Size) / Latency (for SUM, MIN, MAX, AVG which process all data) or (Tensor Size * 2) / Latency (for efficient algorithms like ring all-reduce where each element traverses the ring twice). Clarify the definition used.",
+            "Plot throughput vs. tensor size.",
+            "Compare observed throughput against theoretical network bandwidth limits.",
+            "Repeat measurements for different network configurations (e.g., local host, high-speed interconnect)."
+          ],
+          "expected_results": "Throughput metrics (e.g., GB/s) calculated and analyzed. Throughput should ideally approach network bandwidth limits for larger tensor sizes.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        },
+        {
+          "id": "TC_AR_PERF_003",
+          "title": "Scalability Across World Sizes",
+          "description": "Observe how `all_reduce` performance scales with an increasing number of processes for a fixed tensor size, revealing potential bottlenecks.",
+          "steps": [
+            "Run latency/throughput tests (as defined in TC_AR_PERF_001/002) for a fixed, representative tensor size (e.g., 100MB).",
+            "Vary the `WORLD_SIZE` for these runs (e.g., 2, 4, 8, 16, 32, 64, etc., up to available resources).",
+            "Plot performance (latency or inverse of throughput) vs. `WORLD_SIZE`.",
+            "Analyze the scaling curve to identify linearity (ideal scaling), saturation points, or performance degradation with increased process count."
+          ],
+          "expected_results": "Performance should scale efficiently with increasing world size (e.g., sub-linear or logarithmic increase in latency, or increasing throughput for optimal algorithms). Any non-linearities or bottlenecks should be identified and investigated.",
+          "data_types": [
+            "torch.float32"
+          ],
+          "implementation_file": "test_all_reduce.py"
+        }
+      ]
+    }
+  ]
+}

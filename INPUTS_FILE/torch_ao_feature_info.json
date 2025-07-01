@@ -1,0 +1,82 @@
+{
+  "name": "torch.ao",
+  "description": "PyTorch Adaptive Optimization (torch.ao) is a toolkit for model optimization that includes techniques for quantization, pruning, and other optimizations to improve model performance and efficiency. It provides capabilities for converting models to use lower precision formats, reducing model size through pruning, and optimizing computational graphs for more efficient execution.",
+  "api": "import torch\nimport torch.ao.quantization as quantization\nimport torch.nn as nn\n\n# Example of static quantization workflow\n# Step 1: Create a model\nmodel_fp32 = nn.Sequential(\n    nn.Linear(10, 20),\n    nn.ReLU(),\n    nn.Linear(20, 10)\n)\n\n# Step 2: Prepare the model for quantization\nmodel_fp32.eval()\nmodel_prepared = quantization.prepare(model_fp32)\n\n# Step 3: Calibrate with sample data\ninput_fp32 = torch.randn(4, 10)\nmodel_prepared(input_fp32)\n\n# Step 4: Convert to quantized model\nmodel_quantized = quantization.convert(model_prepared)",
+  "examples": "# Example 1: Static Post-Training Quantization\nimport torch\nimport torch.ao.quantization as quantization\n\n# Define model and set to evaluation mode\nmodel = create_model().eval()\n\n# Set the quantization configuration\nmodel.qconfig = quantization.get_default_qconfig('fbgemm')\n\n# Prepare model for quantization\nmodel_prepared = quantization.prepare(model)\n\n# Calibrate with sample data\nwith torch.no_grad():\n    for data, _ in calibration_data:\n        model_prepared(data)\n\n# Convert to quantized model\nquantized_model = quantization.convert(model_prepared)\n\n# Example 2: Dynamic Quantization\nimport torch.ao.quantization as quantization\n\nmodel = create_model().eval()\nquantized_model = quantization.quantize_dynamic(\n    model, \n    {torch.nn.Linear}, \n    dtype=torch.qint8\n)\n\n# Example 3: Quantization-Aware Training\nimport torch.ao.quantization as quantization\n\n# Set qconfig for QAT\nmodel.qconfig = quantization.get_default_qat_qconfig('fbgemm')\n\n# Prepare model for QAT\nmodel_prepared = quantization.prepare_qat(model.train())\n\n# Train model\ntrain_model(model_prepared)\n\n# Convert to quantized model\nmodel_prepared.eval()\nquantized_model = quantization.convert(model_prepared)",
+  "requirements": {
+    "world_sizes": [1, 2, 4, 8],
+    "data_types": ["int8", "int4", "float16", "bfloat16", "float32"],
+    "device": "cpu",
+    "configurations": [
+      {
+        "type": "static_quantization",
+        "description": "Test post-training static quantization with per-tensor and per-channel quantization"
+      },
+      {
+        "type": "dynamic_quantization",
+        "description": "Test dynamic quantization which quantizes weights statically but activations dynamically"
+      },
+      {
+        "type": "quantization_aware_training",
+        "description": "Test quantization-aware training which simulates quantization during training"
+      },
+      {
+        "type": "pruning",
+        "description": "Test model pruning techniques to reduce model size"
+      },
+      {
+        "type": "fx_graph_mode",
+        "description": "Test FX Graph Mode Quantization for more flexible quantization patterns"
+      },
+      {
+        "type": "backend_integration",
+        "description": "Test integration with optimized backends like FBGEMM and QNNPACK"
+      }
+    ],
+    "validation_approach": [
+      "Compare accuracy between original and optimized models",
+      "Measure inference throughput improvements",
+      "Validate memory reduction benefits",
+      "Test model size reduction",
+      "Verify correctness of outputs within acceptable tolerance",
+      "Test distributed training with quantized models",
+      "Validate on both dummy data and realistic datasets"
+    ],
+    "models": [
+      {
+        "name": "Simple MLP",
+        "description": "Basic multi-layer perceptron for testing basic optimization techniques"
+      },
+      {
+        "name": "ResNet",
+        "description": "CNN with residual connections for testing more complex model optimization"
+      },
+      {
+        "name": "LSTM",
+        "description": "Recurrent model to test optimization on sequential models"
+      },
+      {
+        "name": "Transformer",
+        "description": "Transformer model for testing optimization on attention-based architectures"
+      },
+      {
+        "name": "MobileNet",
+        "description": "Lightweight model designed for mobile devices to test efficient model optimization"
+      }
+    ],
+    "metrics": [
+      "Accuracy",
+      "Latency",
+      "Throughput",
+      "Memory usage",
+      "Model size",
+      "FLOPs reduction"
+    ],
+    "backends": [
+      "FBGEMM (x86)",
+      "QNNPACK (ARM)",
+      "TorchScript",
+      "ONNX Runtime"
+    ]
+  }
+}
