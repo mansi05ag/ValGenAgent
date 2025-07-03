@@ -23,17 +23,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
-from google import genai
+# Import the new OpenAI API key utility
+from utils.openai_api_key_utils import get_openai_api_key
 
 # Load environment variables
 load_dotenv()
-
-# Initialize Gemini client
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
-
-genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 @dataclass
 class TestResult:
@@ -45,25 +39,26 @@ class TestResult:
 
 class TestWorkflowRunner:
     """Manages the end-to-end test workflow"""
-    
+
     def __init__(self, feature_name: str, output_dir: str, verbose: bool = False,
                  test_plan_file: Optional[str] = None, feature_info: Optional[Dict] = None,
-                 feature_info_file: Optional[str] = None):
+                 feature_info_file: Optional[str] = None, api_key = None):
         self.feature_name = feature_name
         self.output_dir = Path(output_dir)
         self.verbose = verbose
         self.test_plan_file = test_plan_file
+        self.api_key = api_key or get_openai_api_key()
         self.feature_info = feature_info
         self.feature_info_file = feature_info_file
-        
+
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
     def load_feature_info(self) -> Dict:
         """Load feature information from file if provided."""
         if self.feature_info:
             return self.feature_info
-            
+
         if self.feature_info_file and os.path.exists(self.feature_info_file):
             try:
                 with open(self.feature_info_file, 'r') as f:
@@ -82,7 +77,7 @@ class TestWorkflowRunner:
         print("Generating test plan...")
         test_plan_file = self.output_dir / f"{self.feature_name}_test_plan.docx"
         test_plan_json = self.output_dir / f"{self.feature_name}_test_plan.json"
-        
+
         try:
             feature_info = self.load_feature_info()
             cmd = [
@@ -91,7 +86,7 @@ class TestWorkflowRunner:
             "--feature", self.feature_name,
                 "--output", str(test_plan_file),
                 "--json", str(test_plan_json)
-        ]
+            ]
 
             if feature_info:
                 feature_info_path = self.output_dir / "temp_feature_info.json"
@@ -99,17 +94,17 @@ class TestWorkflowRunner:
                     json.dump(feature_info, f)
                 cmd.extend(["--feature-info-file", str(feature_info_path)])
 
-        if self.verbose:
+            if self.verbose:
                 cmd.append("--verbose")
 
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if result.returncode != 0:
                 print(f"Error generating test plan: {result.stderr}")
                 return False, ""
-                
+
             return True, str(test_plan_file)
-            
+
         except Exception as e:
             print(f"Error in test plan generation: {e}")
             return False, ""
@@ -120,23 +115,22 @@ class TestWorkflowRunner:
         try:
             cmd = [
             sys.executable,
-            "test_automation_agent.py",
+            "agents/test_automation_agent_v3.py",
                 "--test-plan", test_plan_file,
-                "--output-dir", str(self.output_dir / "generated_tests"),
-                "--timeout", "30"
+                "--output-dir", str(self.output_dir / "generated_tests")
             ]
-            
+
             if self.verbose:
                 cmd.append("--verbose")
 
             result = subprocess.run(cmd, capture_output=True, text=True)
-            
+
             if result.returncode != 0:
                 print(f"Error in test automation: {result.stderr}")
                 return False
 
             return True
-            
+
         except Exception as e:
             print(f"Error running test automation: {e}")
             return False
@@ -145,13 +139,13 @@ class TestWorkflowRunner:
         """Collect results from test execution."""
         results = []
         xml_files = glob.glob(str(self.output_dir / "generated_tests" / "*.xml"))
-        
+
         for xml_file in xml_files:
             try:
                 import xml.etree.ElementTree as ET
                 tree = ET.parse(xml_file)
                 root = tree.getroot()
-                
+
                 for testcase in root.findall(".//testcase"):
                     result = TestResult(
                         test_name=testcase.get('name', 'Unknown'),
@@ -163,7 +157,7 @@ class TestWorkflowRunner:
 
             except Exception as e:
                 print(f"Error parsing test results from {xml_file}: {e}")
-                
+
         return results
 
     def save_results_to_excel(self, results: List[TestResult]) -> None:
@@ -171,7 +165,7 @@ class TestWorkflowRunner:
         if not results:
             print("No test results to save")
             return
-            
+
         try:
             df = pd.DataFrame([
                 {
@@ -182,18 +176,18 @@ class TestWorkflowRunner:
                 }
                 for r in results
             ])
-            
+
             excel_file = self.output_dir / f"{self.feature_name}_test_results.xlsx"
             df.to_excel(excel_file, index=False)
             print(f"Test results saved to: {excel_file}")
-            
+
         except Exception as e:
             print(f"Error saving results to Excel: {e}")
 
     def run(self) -> bool:
         """Run the complete test workflow."""
         start_time = time.time()
-        
+
         # Step 1: Generate test plan
         success, test_plan_file = self.generate_test_plan()
         if not success:
@@ -211,13 +205,13 @@ class TestWorkflowRunner:
         execution_time = time.time() - start_time
         passed = sum(1 for r in results if r.status == 'Passed')
         failed = sum(1 for r in results if r.status == 'Failed')
-        
+
         print("\nTest Execution Summary:")
         print(f"Total Tests: {len(results)}")
         print(f"Passed: {passed}")
         print(f"Failed: {failed}")
         print(f"Total Execution Time: {execution_time:.2f} seconds")
-        
+
         return failed == 0
 
 def main() -> None:

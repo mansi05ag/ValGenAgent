@@ -6,18 +6,12 @@ from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from typing import Dict, Any, Optional, List
-from google import genai
 from dotenv import load_dotenv
+import openai
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
-
-# Initialize Gemini client
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
-
-genai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[Dict[str, Any], str]:
     """
@@ -33,6 +27,14 @@ def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature
         dict: Generated test plan in JSON format
         str: Raw response text for debugging
     """
+    openai.api_key = api_key or os.getenv("OPENAI_API_KEY")
+    if not openai.api_key:
+        raise ValueError("OpenAI API key not found. Provide it as an argument or set the OPENAI_API_KEY environment variable.")
+
+    # Use Intel's internal API if needed, otherwise use standard OpenAI endpoint
+    base_url = "https://apis-internal.intel.com/generativeaiinference/v4"
+    client = OpenAI(api_key=openai.api_key, base_url=base_url)
+
     # Start with base prompt
     base_prompt = f"""Generate a detailed test plan for validating {feature_name} in PyTorch.
     The test plan should include:
@@ -79,18 +81,27 @@ def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature
 
     try:
         # Generate test plan using Gemini
-        response = genai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=base_prompt
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a testing expert that creates reliable JSON-formatted test plans. \n Do not stop output until the entire JSON object is fully completed. \n Ensure every opening { or [ has a matching closing } or ]. \n Do not output explanatory text or partial data. \n If the JSON is large, always generate the full object in one response. \n If truncation is likely, indicate it clearly with a comment at the end like // TRUNCATED. \n All tests for a feature or collective must go into one file."},
+                {"role": "user", "content": base_prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,        # Lower temperature for more consistent formatting
+            max_completion_tokens=5000
         )
 
+        # Get the raw text response
+        response_text = response.choices[0].message.content
+
         # Extract and parse JSON from response
-        response_text = response.text
+        # response_text = response.text
         # Find JSON content between triple backticks if present
         json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
         if json_match:
             response_text = json_match.group(1)
-        
+
         try:
             test_plan = json.loads(response_text)
         except json.JSONDecodeError:
@@ -113,7 +124,7 @@ def repair_json(text: str) -> str:
     lines = text.split('\n')
     in_quote = False
     fixed_lines = []
-    
+
     for line in lines:
         for i, char in enumerate(line):
             if char == '"' and (i == 0 or line[i-1] != '\\'):
@@ -122,58 +133,58 @@ def repair_json(text: str) -> str:
             line = line + '"'
             in_quote = False
         fixed_lines.append(line)
-    
+
     text = '\n'.join(fixed_lines)
-    
+
     # Common JSON fixes
     text = re.sub(r"(?<![\\])\'", '"', text)  # Replace single quotes with double quotes
     text = re.sub(r",(\s*[}\]])", r"\1", text)  # Remove trailing commas
     text = re.sub(r":\s*,", ": null,", text)  # Replace empty values with null
     text = re.sub(r":\s*}", ": null}", text)  # Replace empty values with null
-    
+
     return text
 
 def create_test_plan_document(test_plan: Dict[str, Any], output_file: str) -> None:
     """Create a Word document from the test plan."""
     doc = Document()
-    
+
     # Add title
     title = doc.add_heading(f'Test Plan: {test_plan["feature_name"]}', 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    
+
     # Add categories and test cases
     for category in test_plan['test_categories']:
         # Add category heading
         cat_heading = doc.add_heading(f'Category: {category["name"]}', level=1)
         doc.add_paragraph(category['description'])
-        
+
         # Add test cases
         for test_case in category['test_cases']:
             # Test case title
             tc_heading = doc.add_heading(f'Test Case {test_case["id"]}: {test_case["title"]}', level=2)
-            
+
             # Description
             doc.add_paragraph(f'Description: {test_case["description"]}')
-            
+
             # Implementation file
             if 'implementation_file' in test_case:
                 doc.add_paragraph(f'Implementation file: {test_case["implementation_file"]}')
-            
+
             # Steps
             steps_para = doc.add_paragraph('Steps:')
             for step in test_case['steps']:
                 doc.add_paragraph(step, style='List Bullet')
-            
+
             # Expected Results
             doc.add_paragraph(f'Expected Result: {test_case["expected_results"]}')
-            
+
             # Data Types
             if 'data_types' in test_case and test_case['data_types']:
                 doc.add_paragraph(f'Data Types: {", ".join(test_case["data_types"])}')
-            
+
             # Add spacing between test cases
             doc.add_paragraph()
-    
+
     # Save the document
     doc.save(output_file)
 

@@ -10,10 +10,15 @@ from dataclasses import dataclass, field
 from docx import Document
 from dotenv import load_dotenv
 import autogen
-from utils.openai_api_key_utils import get_openai_api_key
 from autogen.coding import LocalCommandLineCodeExecutor
 
-from vector_index.vector_db import KnowledgeBase
+# Add the parent directory to sys.path to enable imports
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+from utils.openai_api_key_utils import get_openai_api_key
+from vector_index.generate_vector_db import KnowledgeBase
 
 # Load environment variables
 load_dotenv()

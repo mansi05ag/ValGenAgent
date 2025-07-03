@@ -18,6 +18,7 @@ llama-index-core>=0.10.0
 llama-index-embeddings-openai>=0.1.0
 llama-index-vector-stores-faiss>=0.1.0
 llama-index-llms-openai>=0.1.0
+llama-index-llms-openai-like>=0.1.0
 llama-index-readers-web>=0.1.0
 
 # Vector database
