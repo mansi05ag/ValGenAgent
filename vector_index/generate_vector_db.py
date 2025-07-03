@@ -27,7 +27,7 @@ class KnowledgeBase:
         embed_base_url,
         llm_base_url,
         model_name="gpt-4o",
-        knowledge_index_dir="./vector_index",
+        knowledge_index_dir="./index_db",
         tracker_file="document_tracker.pkl",
         embedding_model="text-embedding-ada-002",
         embedding_dim=1536
@@ -276,23 +276,23 @@ class KnowledgeBase:
             print(f"[Error]: querying knowledge base: {e}")
             return f"[Error]: retrieving information: {str(e)}"
 
-# Example usage
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
+# # Example usage
+# if __name__ == "__main__":
+#     from dotenv import load_dotenv
+#     load_dotenv()
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    os.environ["OPENAI_API_BASE"] = "https://apis-internal.intel.com/generativeaiembedding/v2/"
-    kb = KnowledgeBase(
-        api_key=api_key,
-        embed_base_url="https://apis-internal.intel.com/generativeaiembedding/v2/",
-        llm_base_url="https://apis-internal.intel.com/generativeaiinference/v4",
-    )
+#     api_key = os.getenv("OPENAI_API_KEY")
+#     os.environ["OPENAI_API_BASE"] = "https://apis-internal.intel.com/generativeaiembedding/v2/"
+#     kb = KnowledgeBase(
+#         api_key=api_key,
+#         embed_base_url="https://apis-internal.intel.com/generativeaiembedding/v2/",
+#         llm_base_url="https://apis-internal.intel.com/generativeaiinference/v4",
+#     )
 
-    kb.build_index(
-        code_dirs=["code"],
-        urls=["https://docs.pytorch.org/docs/stable/distributed.html"]
-    )
+#     kb.build_index(
+#         code_dirs=["code"],
+#         urls=["https://docs.pytorch.org/docs/stable/distributed.html"]
+#     )
 
-    response = kb.query("Explain PyTorch Collective API all_reduce")
-    print(response)
+#     response = kb.query("Explain PyTorch Collective API all_reduce")
+#     print(response)

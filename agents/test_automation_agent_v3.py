@@ -10,8 +10,10 @@ from dataclasses import dataclass, field
 from docx import Document
 from dotenv import load_dotenv
 import autogen
-from openai_api_key_utils import get_openai_api_key
+from utils.openai_api_key_utils import get_openai_api_key
 from autogen.coding import LocalCommandLineCodeExecutor
+
+from vector_index.vector_db import KnowledgeBase
 
 # Load environment variables
 load_dotenv()
@@ -33,6 +35,15 @@ llm_config = {
     "config_list": config_list,
     "temperature": 0.1,
 }
+
+BASE_URL = "https://apis-internal.intel.com/generativeaiinference/v4"
+BASE_URL_EMB = "https://apis-internal.intel.com/generativeaiembedding/v2/"
+URLS_LIST = [
+    "https://docs.pytorch.org/docs/stable/distributed.html",
+]
+PYC_CODE = 'code'
+os.environ["OPENAI_API_BASE"] = BASE_URL_EMB
+
 
 @dataclass
 class TestCase:
@@ -165,8 +176,11 @@ class CodeGenAgent(autogen.AssistantAgent):
             import sys
             import os
 
+            def run_example(rank, world_size):
+                # Example test function
+
             def test_example():
-                assert True
+                mp.spawn(run_example, args=(world_size), nprocs=world_size, join=True)
 
             # MANDATORY: Execute tests with comprehensive error handling
             if __name__ == "__main__":
@@ -187,6 +201,22 @@ class CodeGenAgent(autogen.AssistantAgent):
             ```"""
         )
         self.logger = logger
+        # Initialize knowledge base
+        self.kb = KnowledgeBase(
+            api_key=api_key,
+            embed_base_url="https://apis-internal.intel.com/generativeaiembedding/v2/",
+            llm_base_url="https://apis-internal.intel.com/generativeaiinference/v4",
+            model_name="gpt-4o"
+        )
+
+    def build_knowledge_base(self, code_dirs, urls):
+        """Build the knowledge base
+
+        Args:
+            code_dirs (list): List of directories to index
+            urls (list): List of URLs to index
+        """
+        self.kb.build_index(code_dirs, urls)
 
 # Agent 2: Code Review
 class CodeReviewAgent(autogen.AssistantAgent):
@@ -340,6 +370,10 @@ class MultiAgentTestOrchestrator:
 
         # Initialize the three agents
         self.codegen_agent = CodeGenAgent(self.logger)
+        self.kb = self.codegen_agent.build_knowledge_base(
+            code_dirs=[PYC_CODE],
+            urls=URLS_LIST
+        )
         self.review_agent = CodeReviewAgent(self.logger)
         self.runner_agent = TestRunnerUserProxy(self.logger, output_dir)
 
@@ -461,6 +495,11 @@ class MultiAgentTestOrchestrator:
             # Initialize a fresh group chat for this file
             self.group_chat.messages = []  # Clear previous messages
 
+            # Get context from knowledge base
+            context = self.codegen_agent.kb.query("all reduce PyTorch Collective API test cases")
+            print(f"[Info]: knowledge context retrieved ({len(context)} chars)")
+
+            full_prompt = f"Based on the following code context:\n\n{context}\n\n {initial_message}"
             # Start the conversation
             self.coordinator.initiate_chat(
                 self.manager,
