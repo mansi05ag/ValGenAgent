@@ -14,3 +14,5 @@ AUTH_BASE_URL = "https://apis-internal.intel.com/v1/auth/token"
 # Specific Endpoints
 OPENAI_CHAT_COMPLETIONS = f"{OPENAI_BASE_URL}/chat/completions"
 OPENAI_EMBEDDINGS = f"{OPENAI_BASE_URL}/embeddings"
+
+MODEL_INFERENCE="gpt-4o"

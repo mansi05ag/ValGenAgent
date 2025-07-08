@@ -18,7 +18,15 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from utils.openai_api_key_utils import get_openai_api_key
+from utils.openai_endpoints import (
+    EMBEDDING_BASE_URL,
+    INFERENCE_BASE_URL,
+    MODEL_INFERENCE
+)
 from vector_index.generate_vector_db import KnowledgeBase
+from prompts.code_agent_system_prompt import CODE_AGENT_SYSTEM_PROMPT
+from prompts.review_agent_system_prompt import REVIEW_AGENT_SYSTEM_PROMPT
+
 
 # Load environment variables
 load_dotenv()
@@ -26,11 +34,12 @@ load_dotenv()
 # Get Intel API key
 api_key = get_openai_api_key()
 
+
 # Configure autogen for Intel's internal API
 config_list = [
     {
-        "model": "gpt-4o",
-        "base_url": "https://apis-internal.intel.com/generativeaiinference/v4",
+        "model": MODEL_INFERENCE,
+        "base_url": INFERENCE_BASE_URL,
         "api_type": "openai",
         "max_tokens": 5000
     }
@@ -41,13 +50,11 @@ llm_config = {
     "temperature": 0.1,
 }
 
-BASE_URL = "https://apis-internal.intel.com/generativeaiinference/v4"
-BASE_URL_EMB = "https://apis-internal.intel.com/generativeaiembedding/v2/"
 URLS_LIST = [
     "https://docs.pytorch.org/docs/stable/distributed.html",
 ]
-PYC_CODE = 'code'
-os.environ["OPENAI_API_BASE"] = BASE_URL_EMB
+PYC_CODE = '../code'
+os.environ["OPENAI_API_BASE"] = EMBEDDING_BASE_URL
 
 
 @dataclass
@@ -153,65 +160,15 @@ class CodeGenAgent(autogen.AssistantAgent):
         super().__init__(
             name="TestGenerationAgent",
             llm_config=llm_config,
-            system_message="""You are a test generation agent in a collaborative team. Your role is to generate high-quality Python test code based on test case specifications.
-
-            When you receive a request to generate test code:
-            1. Analyze the test case requirements carefully
-            2. Generate pytest-compatible test code with proper imports and setup
-            3. Include parameterized tests when appropriate
-            4. Add proper error handling and timeouts
-            5. Follow Python testing best practices
-            6. Present your code in ```python code blocks with a filename directive as the first line
-            7. Use '# filename: test_<name>.py' at the start of code blocks to specify the filename
-            8. If you receive feedback from the review agent, incorporate their suggestions and generate improved code
-
-            **MANDATORY**: ALWAYS include a main execution block that runs the tests. Your code MUST include either:
-            - A subprocess.run() call that executes pytest on the test file
-            - OR an if __name__ == "__main__": block that runs the tests
-
-            The execution block should include proper error handling and output reporting.
-
-            Always be collaborative and responsive to feedback from other agents in the conversation.
-
-            Example format (ALWAYS include the execution part):
-            ```python
-            # filename: test_example.py
-            import pytest
-            import subprocess
-            import sys
-            import os
-
-            def run_example(rank, world_size):
-                # Example test function
-
-            def test_example():
-                mp.spawn(run_example, args=(world_size), nprocs=world_size, join=True)
-
-            # MANDATORY: Execute tests with comprehensive error handling
-            if __name__ == "__main__":
-                result = subprocess.run([
-                    sys.executable, '-m', 'pytest', __file__,
-                    '-v', '--tb=short', '--disable-warnings', '--junitxml=test_results.xml'
-                ], capture_output=True, text=True, timeout=120)
-
-                print(f"Exit code: {result.returncode}")
-                print(f"STDOUT:\\n{result.stdout}")
-                if result.stderr:
-                    print(f"STDERR:\\n{result.stderr}")
-
-                if result.returncode == 0:
-                    print("SUCCESS: Test execution completed successfully!")
-                else:
-                    print("FAILED: Test execution failed!")
-            ```"""
+            system_message=CODE_AGENT_SYSTEM_PROMPT
         )
         self.logger = logger
         # Initialize knowledge base
         self.kb = KnowledgeBase(
             api_key=api_key,
-            embed_base_url="https://apis-internal.intel.com/generativeaiembedding/v2/",
-            llm_base_url="https://apis-internal.intel.com/generativeaiinference/v4",
-            model_name="gpt-4o"
+            embed_base_url=EMBEDDING_BASE_URL,
+            llm_base_url=INFERENCE_BASE_URL ,
+            model_name=MODEL_INFERENCE,
         )
 
     def build_knowledge_base(self, code_dirs, urls):
@@ -229,43 +186,7 @@ class CodeReviewAgent(autogen.AssistantAgent):
         super().__init__(
             name="TestCodeReviewAgent",
             llm_config=llm_config,
-            system_message="""You are a code review agent specializing in Python test code review within a collaborative team.
-
-            **IMPORTANT**: You are ONLY responsible for reviewing code, NOT generating or writing code. Your role is strictly limited to analysis and feedback.
-
-            Your role in the GroupChat workflow:
-            1. ALWAYS review any test code generated by TestGenerationAgent
-            2. Provide specific, constructive feedback for improvements
-            3. If code has issues, provide detailed feedback and request that TestGenerationAgent regenerate the code
-            4. If code is good, give EXPLICIT APPROVAL using these exact phrases:
-            - "APPROVED FOR EXECUTION"
-            - "CODE IS READY FOR EXECUTION"
-            - "APPROVE THIS CODE FOR TESTING"
-
-            CRITICAL REVIEW CRITERIA - ALL MUST BE PRESENT:
-            - Code quality, correctness, and best practices
-            - Proper error handling and edge cases
-            - Pytest compatibility and proper test structure
-            - Code clarity and maintainability
-            - Proper resource cleanup and timeout handling
-            - Testing best practices and conventions
-
-            **MANDATORY REQUIREMENT**: The test file MUST include a main execution block that actually runs the tests. Look for code like:
-            ```python
-            if __name__ == "__main__":
-                # Code that executes the tests
-            ```
-            OR a direct subprocess.run() call that executes pytest, like:
-            ```python
-            result = subprocess.run([sys.executable, '-m', 'pytest', 'filename.py', ...], ...)
-            ```
-
-            **DO NOT APPROVE** any code that lacks a way to actually execute the tests. If the test file only contains test functions but no execution mechanism, provide feedback requesting the addition of a main block or pytest execution code.
-
-            **CRITICAL**: You must NEVER generate, write, or provide code. Only provide review comments, feedback, and approval/rejection decisions. Always direct TestGenerationAgent to make the actual code changes.
-
-            IMPORTANT: You must explicitly approve code before execution can proceed.
-            Be thorough but decisive - either request specific improvements OR give clear approval."""
+            system_message=REVIEW_AGENT_SYSTEM_PROMPT,
         )
         self.logger = logger
 

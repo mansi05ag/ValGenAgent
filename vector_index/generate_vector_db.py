@@ -275,24 +275,3 @@ class KnowledgeBase:
         except Exception as e:
             print(f"[Error]: querying knowledge base: {e}")
             return f"[Error]: retrieving information: {str(e)}"
-
-# # Example usage
-# if __name__ == "__main__":
-#     from dotenv import load_dotenv
-#     load_dotenv()
-
-#     api_key = os.getenv("OPENAI_API_KEY")
-#     os.environ["OPENAI_API_BASE"] = "https://apis-internal.intel.com/generativeaiembedding/v2/"
-#     kb = KnowledgeBase(
-#         api_key=api_key,
-#         embed_base_url="https://apis-internal.intel.com/generativeaiembedding/v2/",
-#         llm_base_url="https://apis-internal.intel.com/generativeaiinference/v4",
-#     )
-
-#     kb.build_index(
-#         code_dirs=["code"],
-#         urls=["https://docs.pytorch.org/docs/stable/distributed.html"]
-#     )
-
-#     response = kb.query("Explain PyTorch Collective API all_reduce")
-#     print(response)
