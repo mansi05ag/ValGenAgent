@@ -26,7 +26,7 @@ from utils.openai_endpoints import (
 from vector_index.generate_vector_db import KnowledgeBase
 from prompts.code_agent_system_prompt import CODE_AGENT_SYSTEM_PROMPT
 from prompts.review_agent_system_prompt import REVIEW_AGENT_SYSTEM_PROMPT
-
+from prompts.test_coordinator_system_prompt import TEST_COORDINATOR_AGENT_SYSTEM_PROMPT
 
 # Load environment variables
 load_dotenv()
@@ -316,7 +316,7 @@ class MultiAgentTestOrchestrator:
         self.group_chat = ContextManagedGroupChat(
             agents=[self.coordinator, self.codegen_agent, self.review_agent, self.runner_agent],
             messages=[],
-            max_round=50,  # Allow enough rounds for iterations
+            max_round=10,  # Allow enough rounds for iterations
             max_context_messages=self.max_context_messages,
             logger=self.logger
         )
@@ -325,38 +325,7 @@ class MultiAgentTestOrchestrator:
         self.manager = autogen.GroupChatManager(
             groupchat=self.group_chat,
             llm_config=llm_config,
-            system_message="""You are managing a test generation workflow with the following agents:
-            1. TestGenerationAgent: Generates Python test code (ONLY agent that writes code)
-            2. TestCodeReviewAgent: Reviews generated code and provides feedback (NEVER generates code)
-            3. TestExecutionAgent: Executes test code only after approval
-            4. TestCoordinator: Coordinates the workflow
-
-            CRITICAL WORKFLOW RULES:
-            1. TestGenerationAgent ALWAYS speaks first to generate initial code
-            2. TestCodeReviewAgent ALWAYS reviews any code from TestGenerationAgent
-            3. TestCodeReviewAgent MUST NEVER generate or write code - only provide reviews and feedback
-            4. If TestCodeReviewAgent finds issues/improvements needed:
-               - TestCodeReviewAgent provides specific feedback requesting changes
-               - TestGenerationAgent must regenerate code addressing the feedback
-               - TestCodeReviewAgent must re-review the updated code from TestGenerationAgent
-               - Continue this cycle until TestCodeReviewAgent EXPLICITLY APPROVES
-            5. TestExecutionAgent ONLY executes code AFTER TestCodeReviewAgent gives explicit approval
-            6. If TestExecutionAgent fails, provide feedback to TestGenerationAgent to fix issues
-
-            ROLE ENFORCEMENT:
-            - TestGenerationAgent: The ONLY agent allowed to generate, write, or modify code
-            - TestCodeReviewAgent: ONLY provides reviews, feedback, and approval/rejection decisions
-
-            APPROVAL KEYWORDS: TestCodeReviewAgent must use phrases like:
-            - "APPROVED FOR EXECUTION"
-            - "CODE IS READY FOR EXECUTION"
-            - "APPROVE THIS CODE FOR TESTING"
-
-            Only allow TestExecutionAgent to speak after seeing these approval keywords.
-            Ensure proper iterative feedback loops between generation and review.
-
-            NOTE: Context is automatically managed to prevent token overflow.
-            """
+            system_message=TEST_COORDINATOR_AGENT_SYSTEM_PROMPT,
         )
 
         os.makedirs(output_dir, exist_ok=True)
@@ -404,16 +373,7 @@ class MultiAgentTestOrchestrator:
 
             Test Cases to implement:
             {test_cases_text}
-
-            Please work together to:
-            1. Generate Python test code that implements these test cases
-            2. Review the generated code for quality and correctness
-            3. Execute the tests autonomously with full automation (handle dependencies, environment setup, etc.)
-            4. If there are issues, iterate and improve until successful
-
-            Let's start with code generation.
             """
-
         try:
             # Start the group chat
             self.logger.log("Orchestrator", f"Starting GroupChat for {impl_file}")
@@ -425,11 +385,11 @@ class MultiAgentTestOrchestrator:
             context = self.codegen_agent.kb.query("all reduce PyTorch Collective API test cases")
             print(f"[Info]: knowledge context retrieved ({len(context)} chars)")
 
-            full_prompt = f"Based on the following code context:\n\n{context}\n\n {initial_message}"
+            prompt_with_context = f"Based on the following code context:\n\n{context}\n\n {initial_message}"
             # Start the conversation
             self.coordinator.initiate_chat(
                 self.manager,
-                message=initial_message,
+                message=prompt_with_context,
                 max_turns=20  # Limit turns to prevent infinite loops
             )
 
