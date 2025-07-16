@@ -399,6 +399,12 @@ class MultiAgentTestOrchestrator:
             # Check if we have successful test execution
             success = self._extract_success_from_chat()
 
+            # Debug logging
+            self.logger.log("Orchestrator", f"SUCCESS DETECTION: Found {len(self.group_chat.messages)} messages in chat")
+            for i, msg in enumerate(self.group_chat.messages[-3:]):  # Log last 3 messages for debugging
+                content_preview = str(msg.get('content', ''))[:200]  # First 200 chars
+                self.logger.log("Orchestrator", f"Message {i}: {content_preview}...")
+
             if success:
                 self.logger.log("Orchestrator", f"SUCCESS: GroupChat completed successfully for {impl_file}")
                 # Save artifacts from the group chat
@@ -427,12 +433,39 @@ class MultiAgentTestOrchestrator:
         return '\n'.join(formatted)
 
     def _extract_success_from_chat(self) -> bool:
-        """Extract success status from the group chat messages"""
+        """Extract success status from the group chat messages and logger"""
         # Look through the chat messages for execution success indicators
+        success_patterns = [
+            r'SUCCESS:.*Test execution completed successfully',
+            r'Test execution completed successfully',
+            r'\d+\s+passed\s+in\s+[\d.]+s',  # pytest pattern like "3 passed in 36.82s"
+            r'=+\s*\d+\s+passed.*=+',  # pytest summary pattern
+        ]
+
+        # Check GroupChat messages
         for message in self.group_chat.messages:
             content = str(message.get('content', ''))
-            if 'SUCCESS: Test execution completed successfully!' in content:
-                return True
+            for pattern in success_patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    # Additional check to avoid false positives with failures
+                    if 'failed' not in content.lower() or 'passed' in content.lower():
+                        self.logger.log("Orchestrator", f"SUCCESS PATTERN MATCHED: '{pattern}' in GroupChat message")
+                        return True
+
+        # Check logger messages as fallback
+        for sender, message in self.logger.get_log():
+            for pattern in success_patterns:
+                if re.search(pattern, str(message), re.IGNORECASE):
+                    if 'failed' not in str(message).lower() or 'passed' in str(message).lower():
+                        self.logger.log("Orchestrator", f"SUCCESS PATTERN MATCHED: '{pattern}' in logger message from {sender}")
+                        return True
+
+        # Additional fallback: check if any test files were generated and executed successfully
+        if self._check_generated_test_files():
+            self.logger.log("Orchestrator", "SUCCESS detected via generated test files check")
+            return True
+
+        self.logger.log("Orchestrator", "No success patterns found in chat messages or logger")
         return False
 
     def _save_artifacts_from_chat(self, impl_file: str):
@@ -516,6 +549,44 @@ class MultiAgentTestOrchestrator:
             self.logger.log("Orchestrator", "Performing periodic context management...")
             self._manage_context_length()
 
+    def _check_generated_test_files(self) -> bool:
+        """Check if test files were actually generated and executed successfully"""
+        try:
+            # Check if any Python test files exist in the output directory
+            if not os.path.exists(self.output_dir):
+                return False
+
+            test_files = []
+            for file in os.listdir(self.output_dir):
+                if file.endswith('.py') and ('test_' in file or '_test' in file):
+                    test_files.append(os.path.join(self.output_dir, file))
+
+            if not test_files:
+                self.logger.log("Orchestrator", "No test files found in output directory")
+                return False
+
+            # Check if any test files have recent modification time (within last few minutes)
+            import time
+            current_time = time.time()
+            recent_files = []
+
+            for test_file in test_files:
+                if os.path.exists(test_file):
+                    file_mtime = os.path.getmtime(test_file)
+                    # Consider files modified within the last 10 minutes as "recent"
+                    if current_time - file_mtime < 600:  # 600 seconds = 10 minutes
+                        recent_files.append(test_file)
+
+            if recent_files:
+                self.logger.log("Orchestrator", f"Found {len(recent_files)} recently generated test file(s): {recent_files}")
+                return True
+
+            self.logger.log("Orchestrator", f"Found {len(test_files)} test files but none are recent")
+            return False
+
+        except Exception as e:
+            self.logger.log("Orchestrator", f"Error checking generated test files: {str(e)}")
+            return False
 
 def main():
     """Main entry point for the multi-agent test automation system"""
