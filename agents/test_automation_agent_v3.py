@@ -51,7 +51,7 @@ llm_config = {
 }
 
 URLS_LIST = [
-    "https://docs.pytorch.org/docs/stable/distributed.html",
+    #"https://docs.pytorch.org/docs/stable/distributed.html",
 ]
 PYC_CODE = '../code'
 os.environ["OPENAI_API_BASE"] = EMBEDDING_BASE_URL
@@ -382,8 +382,10 @@ class MultiAgentTestOrchestrator:
             self.group_chat.messages = []  # Clear previous messages
 
             # Get context from knowledge base
-            context = self.codegen_agent.kb.query("all reduce PyTorch Collective API test cases")
-            print(f"[Info]: knowledge context retrieved ({len(context)} chars)")
+            context = self.codegen_agent.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
+            if "[Error]" in context or not context:
+                self.logger.log("Orchestrator", f"ERROR: Failed to retrieve doc chunks for {impl_file}")
+                return False
 
             prompt_with_context = f"Based on the following code context:\n\n{context}\n\n {initial_message}"
             # Start the conversation

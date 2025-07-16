@@ -30,8 +30,7 @@ if __name__ == "__main__":
         api_key=api_key,
         embed_base_url = EMBEDDING_BASE_URL,
         llm_base_url = INFERENCE_BASE_URL,
-        knowledge_index_dir="./test_index_db",
-        tracker_file="test_document_tracker.pkl",
+        knowledge_index_dir="./test_index_db"
     )
 
     # check if the code directory exists
@@ -43,5 +42,11 @@ if __name__ == "__main__":
         urls=URLS
     )
 
-    response = kb.query("Explain PyTorch Collective API all_reduce")
+    query_str = "Write test for Collective API all_reduce based on the code context for hpu device"
+    print(f"Querying for: {query_str}")
+    response = kb.query(query_str)
     print(response)
+    doc_chuks = kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
+    print("Retrieved document chunk:")
+    print(doc_chuks)
+    print("index built and queried successfully.")
