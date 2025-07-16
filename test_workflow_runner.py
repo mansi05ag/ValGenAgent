@@ -42,7 +42,8 @@ class TestWorkflowRunner:
 
     def __init__(self, feature_name: str, output_dir: str, verbose: bool = False,
                  test_plan_file: Optional[str] = None, feature_info: Optional[Dict] = None,
-                 feature_info_file: Optional[str] = None, api_key = None):
+                 feature_info_file: Optional[str] = None, api_key = None,
+                 generate_plan: bool = True, run_automation: bool = True):
         self.feature_name = feature_name
         self.output_dir = Path(output_dir)
         self.verbose = verbose
@@ -50,6 +51,8 @@ class TestWorkflowRunner:
         self.api_key = api_key or get_openai_api_key()
         self.feature_info = feature_info
         self.feature_info_file = feature_info_file
+        self.generate_plan = generate_plan
+        self.run_automation = run_automation
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -184,52 +187,151 @@ class TestWorkflowRunner:
         except Exception as e:
             print(f"Error saving results to Excel: {e}")
 
+    def print_workflow_summary(self):
+        """Print a summary of the workflow configuration."""
+        print("=" * 60)
+        print(f"Test Workflow Configuration")
+        print("=" * 60)
+        print(f"Feature: {self.feature_name}")
+        print(f"Output Directory: {self.output_dir}")
+        print(f"Generate Test Plan: {'Yes' if self.generate_plan else 'No'}")
+        print(f"Run Test Automation: {'Yes' if self.run_automation else 'No'}")
+        if self.test_plan_file:
+            print(f"Test Plan File: {self.test_plan_file}")
+        if self.feature_info_file:
+            print(f"Feature Info File: {self.feature_info_file}")
+        print("=" * 60)
+
     def run(self) -> bool:
         """Run the complete test workflow."""
+        # Print workflow configuration
+        self.print_workflow_summary()
+        
         start_time = time.time()
+        test_plan_file = None
 
-        # Step 1: Generate test plan
-        success, test_plan_file = self.generate_test_plan()
-        if not success:
-            return False
+        # Print the workflow summary at the start
+        self.print_workflow_summary()
 
-        # Step 2: Run test automation
-        if not self.run_test_automation(test_plan_file):
-            return False
+        # Step 1: Generate test plan (if enabled)
+        if self.generate_plan:
+            print("Step 1: Generating test plan...")
+            success, test_plan_file = self.generate_test_plan()
+            if not success:
+                print("Failed to generate test plan.")
+                return False
+            print(f"Test plan generated successfully: {test_plan_file}")
+        else:
+            # Use provided test plan file or look for existing one
+            if self.test_plan_file and os.path.exists(self.test_plan_file):
+                test_plan_file = self.test_plan_file
+                print(f"Using existing test plan: {test_plan_file}")
+            else:
+                # Look for existing test plan in output directory
+                possible_plans = [
+                    self.output_dir / f"{self.feature_name}_test_plan.docx",
+                    self.output_dir / f"{self.feature_name}_test_plan.json"
+                ]
+                for plan_file in possible_plans:
+                    if plan_file.exists():
+                        test_plan_file = str(plan_file)
+                        print(f"Found existing test plan: {test_plan_file}")
+                        break
+                
+                if not test_plan_file:
+                    print("Error: No test plan file found and test plan generation is disabled.")
+                    print("Either provide --test-plan or enable --generate-plan")
+                    return False
 
-        # Step 3: Collect and save results
-        results = self.collect_test_results()
-        self.save_results_to_excel(results)
+        # Step 2: Run test automation (if enabled)
+        if self.run_automation:
+            print("Step 2: Running test automation...")
+            if not self.run_test_automation(test_plan_file):
+                print("Failed to run test automation.")
+                return False
+            print("Test automation completed successfully.")
+            
+            # Step 3: Collect and save results (only if automation ran)
+            print("Step 3: Collecting and saving test results...")
+            results = self.collect_test_results()
+            self.save_results_to_excel(results)
+            
+            # Print summary
+            execution_time = time.time() - start_time
+            passed = sum(1 for r in results if r.status == 'Passed')
+            failed = sum(1 for r in results if r.status == 'Failed')
 
-        # Print summary
-        execution_time = time.time() - start_time
-        passed = sum(1 for r in results if r.status == 'Passed')
-        failed = sum(1 for r in results if r.status == 'Failed')
+            print("\nTest Execution Summary:")
+            print(f"Total Tests: {len(results)}")
+            print(f"Passed: {passed}")
+            print(f"Failed: {failed}")
+            print(f"Total Execution Time: {execution_time:.2f} seconds")
 
-        print("\nTest Execution Summary:")
-        print(f"Total Tests: {len(results)}")
-        print(f"Passed: {passed}")
-        print(f"Failed: {failed}")
-        print(f"Total Execution Time: {execution_time:.2f} seconds")
-
-        return failed == 0
+            return failed == 0
+        else:
+            print("Test automation step skipped.")
+            execution_time = time.time() - start_time
+            print(f"Total Execution Time: {execution_time:.2f} seconds")
+            return True
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser(description='Run the complete test workflow')
+    parser = argparse.ArgumentParser(
+        description='Run the complete test workflow',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run complete workflow (generate plan + run automation)
+  python test_workflow_runner.py --feature collectives
+  
+  # Only generate test plan
+  python test_workflow_runner.py --feature collectives --generate-plan-only
+  
+  # Only run test automation (requires existing test plan)
+  python test_workflow_runner.py --feature collectives --test-automation-only --test-plan path/to/plan.docx
+  
+  # Run automation with auto-discovery of existing test plan
+  python test_workflow_runner.py --feature collectives --test-automation-only
+        """
+    )
     parser.add_argument('--feature', required=True, help='Name of the feature to test')
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
     parser.add_argument('--feature-info', help='Path to feature info JSON file')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
+    
+    # Step control arguments
+    step_group = parser.add_mutually_exclusive_group()
+    step_group.add_argument('--generate-plan-only', action='store_true', 
+                           help='Only generate test plan, skip test automation')
+    step_group.add_argument('--test-automation-only', action='store_true',
+                           help='Only run test automation, skip test plan generation')
+    
     args = parser.parse_args()
+
+    # Determine which steps to run
+    generate_plan = True
+    run_automation = True
+    
+    if args.generate_plan_only:
+        generate_plan = True
+        run_automation = False
+        print("Mode: Generate test plan only")
+    elif args.test_automation_only:
+        generate_plan = False
+        run_automation = True
+        print("Mode: Test automation only")
+    else:
+        print("Mode: Complete workflow (generate plan + test automation)")
 
     runner = TestWorkflowRunner(
         feature_name=args.feature,
         output_dir=args.output_dir,
         verbose=args.verbose,
         test_plan_file=args.test_plan,
-        feature_info_file=args.feature_info
+        feature_info_file=args.feature_info,
+        generate_plan=generate_plan,
+        run_automation=run_automation
     )
 
     success = runner.run()
