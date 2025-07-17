@@ -11,6 +11,7 @@ pandas
 requests>=2.31.0
 openpyxl>=3.1.2
 pyautogen>=0.2.0
+autogen>=0.9.6
 openai>=1.0.0
 
 # LlamaIndex core and extensions

@@ -294,6 +294,10 @@ class MultiAgentTestOrchestrator:
         self.max_context_messages = max_context_messages
         self.logger = MessageLogger()
 
+        # check if source code dir exists
+        if not os.path.exists(PYC_CODE):
+            raise FileNotFoundError(f"The source code directory '{PYC_CODE}' does not exist.")
+
         # Initialize the three agents
         self.codegen_agent = CodeGenAgent(self.logger)
         self.kb = self.codegen_agent.build_knowledge_base(
