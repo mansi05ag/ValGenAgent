@@ -2,71 +2,47 @@
 
 Validation Code Generator Agent: An agentic application (based on AutoGen) for automating the validation code generation for PyTorch Collective APIs.
 
-## Complete Pipeline Flow:
-+-------------------+
-|   Configuration   |
-|  (API Keys, URLs) |
-+-------------------+
-          ↓
-+-------------------+
-| Document Loading  |
-| Local Files + URLs|
-+-------------------+
-          ↓
-+-------------------+
-| Parsing & Embedding|
-| Nodes + Embeddings |
-+-------------------+
-          ↓
-+-------------------+
-| Index Management  |
-| Load/Create Index |
-+-------------------+
-          ↓
-+-------------------+
-|  Query Engine     |
-| Vector DB + LLM   |
-+-------------------+
-          ↓
-+-------------------+
-|   Agent System    |
-| TestWriter, etc.  |
-+-------------------+
-          ↓
-+-------------------+
-|    Execution      |
-| Query + GroupChat |
-+-------------------+
+![Alt text](./workflow-arch.jpg "Workflow Architecture")
 
 ## Deatils overview
 1. Configuration
-    •	Load environment variables using dotenv.
-    •	Define constants:
-        o	API_KEY, BASE_URL, BASE_URL_EMB, MODEL, INDEX_DIR, etc.
+    - Load environment variables using dotenv.
+    - Define constants:
+        - API_KEY, BASE_URL, BASE_URL_EMB, MODEL, INDEX_DIR, etc.
 
 2. Document Loading
-    •	Local Files: Use SimpleDirectoryReader to load .py files recursively from the code directory.
-    •	Web URLs: Use BeautifulSoupWebReader to fetch content from URLs (e.g., PyTorch documentation).
+    - Local Files: Use SimpleDirectoryReader to load .py files recursively from the code directory.
+    - Web URLs: Use BeautifulSoupWebReader to fetch content from URLs (e.g., PyTorch documentation).
 
 3. Parsing & Embedding
-    •	Parse loaded documents into nodes using SimpleNodeParser.
-    •	Generate embeddings for nodes using OpenAIEmbedding.
+    - Parse loaded documents into nodes using SimpleNodeParser.
+    - Generate embeddings for nodes using OpenAIEmbedding.
 
 4. Index Management
-    •	Existing Index: Load the FAISS vector store and index from INDEX_DIR if it exists.
-    •	New Index: Create a new FAISS vector store and index, then persist it to INDEX_DIR.
+    - Create a new index db that persists in INDEX_DIR.
 
-5. Query Engine
-    •	Create a query engine using VectorStoreIndex and OpenAILike LLM.
+5. Query Engine & documents retrival
+    - Create interface API for query and documents retrival.
 
-6. Agent System
-    •	Define agents:
-        o	TestWriter: Writes unit tests for PyTorch APIs.
-        o	Reviewer: Reviews and improves the tests.
-        o	UserProxy: Represents the user in the group chat.
-    •	Set up a GroupChat with agents and manage it using GroupChatManager.
+6. Agents
+    - Code Agent generates initial test code.
+    - Review Agent reviews the code and provides feedback.
+    - Runner/Proxy agent executes the approved code and provides execution results.
+    - Coordinator agent ensures smooth communication and adherence to workflow rules.
 
-7. Execution
-    •	Query the vector database for context using query_engine.
-    •	Pass the context to agents via GroupChatManager for collaborative test generation and review.
+# Usage:
+    - To generate and execute test cases from json file:
+        - python test_automation_agent_v3.py --test-plan ../test_plan/collectives_test_plan_debug.json --output-dir test_output_final
+
+    - Run complete workflow (generate plan + run automation)
+        - python test_workflow_runner.py --feature collectives
+
+    - Only generate test plan
+        - python test_workflow_runner.py --feature collectives --generate-plan-only
+
+    - Only run test automation (requires existing test plan)
+        - python test_workflow_runner.py --feature collectives --test-automation-only --test-plan path/to/plan.docx
+
+    - Run automation with auto-discovery of existing test plan
+        - python test_workflow_runner.py --feature collectives --test-automation-only
 
