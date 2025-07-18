@@ -126,11 +126,20 @@ class TestWorkflowRunner:
             if self.verbose:
                 cmd.append("--verbose")
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Use Popen for real-time output streaming
+            with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1, universal_newlines=True) as process:
 
-            if result.returncode != 0:
-                print(f"Error in test automation: {result.stderr}")
-                return False
+                # Stream output in real-time
+                for line in process.stdout:
+                    print(line.rstrip())
+
+                # Wait for process to complete
+                process.wait()
+
+                if process.returncode != 0:
+                    print(f"Error in test automation: Process exited with code {process.returncode}")
+                    return False
 
             return True
 
@@ -206,12 +215,9 @@ class TestWorkflowRunner:
         """Run the complete test workflow."""
         # Print workflow configuration
         self.print_workflow_summary()
-        
+
         start_time = time.time()
         test_plan_file = None
-
-        # Print the workflow summary at the start
-        self.print_workflow_summary()
 
         # Step 1: Generate test plan (if enabled)
         if self.generate_plan:
@@ -237,7 +243,7 @@ class TestWorkflowRunner:
                         test_plan_file = str(plan_file)
                         print(f"Found existing test plan: {test_plan_file}")
                         break
-                
+
                 if not test_plan_file:
                     print("Error: No test plan file found and test plan generation is disabled.")
                     print("Either provide --test-plan or enable --generate-plan")
@@ -250,12 +256,12 @@ class TestWorkflowRunner:
                 print("Failed to run test automation.")
                 return False
             print("Test automation completed successfully.")
-            
+
             # Step 3: Collect and save results (only if automation ran)
             print("Step 3: Collecting and saving test results...")
             results = self.collect_test_results()
             self.save_results_to_excel(results)
-            
+
             # Print summary
             execution_time = time.time() - start_time
             passed = sum(1 for r in results if r.status == 'Passed')
@@ -283,13 +289,13 @@ def main() -> None:
 Examples:
   # Run complete workflow (generate plan + run automation)
   python test_workflow_runner.py --feature collectives
-  
+
   # Only generate test plan
   python test_workflow_runner.py --feature collectives --generate-plan-only
-  
+
   # Only run test automation (requires existing test plan)
   python test_workflow_runner.py --feature collectives --test-automation-only --test-plan path/to/plan.docx
-  
+
   # Run automation with auto-discovery of existing test plan
   python test_workflow_runner.py --feature collectives --test-automation-only
         """
@@ -299,20 +305,20 @@ Examples:
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
     parser.add_argument('--feature-info', help='Path to feature info JSON file')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
-    
+
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
-    step_group.add_argument('--generate-plan-only', action='store_true', 
+    step_group.add_argument('--generate-plan-only', action='store_true',
                            help='Only generate test plan, skip test automation')
     step_group.add_argument('--test-automation-only', action='store_true',
                            help='Only run test automation, skip test plan generation')
-    
+
     args = parser.parse_args()
 
     # Determine which steps to run
     generate_plan = True
     run_automation = True
-    
+
     if args.generate_plan_only:
         generate_plan = True
         run_automation = False

@@ -53,7 +53,7 @@ llm_config = {
 URLS_LIST = [
     #"https://docs.pytorch.org/docs/stable/distributed.html",
 ]
-PYC_CODE = '../code'
+PYC_CODE = 'code'
 os.environ["OPENAI_API_BASE"] = EMBEDDING_BASE_URL
 
 
