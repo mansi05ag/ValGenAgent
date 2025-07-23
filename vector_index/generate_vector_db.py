@@ -16,6 +16,46 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.readers.web import BeautifulSoupWebReader
 from llama_index.llms.openai_like import OpenAILike
 
+from llama_index.readers.github import GithubRepositoryReader,GithubClient #pip install llama-index-readers-github
+os.environ["GITHUB_TOKEN"] = "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"
+github_token = os.environ.get("GITHUB_TOKEN")
+
+owner = "pytorch"
+repo = "pytorch"
+branch = "v2.7.1"
+target_directories = ["test/distributed"]
+github_client = GithubClient(github_token=github_token, verbose=True)
+
+# reader = GithubRepositoryReader(
+#     github_client=github_client,
+#     owner=owner,
+#     repo=repo,
+#     use_parser=True,
+#     verbose=False,
+#     # Use filter_directories to specify which directories to include
+#     filter_directories=(
+#         target_directories,
+#         GithubRepositoryReader.FilterType.INCLUDE,
+#     ),
+#     # ignore_directories=["docs", "examples"],
+#     # And filter by file extensions
+#     # filter_file_extensions=(
+#     #     [
+#     #         ".png",
+#     #     ],
+#     #     GithubRepositoryReader.FilterType.EXCLUDE,
+#     # ),
+#     # timeout=httpx.Timeout(30.0)
+# )
+
+# documents = reader.load_data(branch=branch)
+
+# print(f"Ingested {len(documents)} documents from the specified directory(ies).")
+
+# # index = VectorStoreIndex.from_documents(documents)
+
+# import pdb; pdb.set_trace()
+
 class KnowledgeBase:
     """Knowledge base using LlamaIndex for document retrieval and querying"""
 
@@ -62,13 +102,30 @@ class KnowledgeBase:
     def build_index(self, code_dirs, urls):
         """Build the index from code directories and URLs - always rebuild to avoid corruption"""
         try:
-            print("[Info]: Building index from scratch...")
-
-            # Always remove existing index to avoid KeyError issues
+            # Check if index already exists
             if os.path.exists(self.knowledge_index_dir):
-                import shutil
-                shutil.rmtree(self.knowledge_index_dir)
-                print("[Info]: Removed existing index directory")
+                try:
+                    print("[Info]: Loading existing index...")
+                    storage_context = StorageContext.from_defaults(persist_dir=self.knowledge_index_dir)
+                    self.index = load_index_from_storage(
+                        storage_context,
+                        embed_model=self.embed_model
+                    )
+
+                    # Create query engine
+                    print("[Info]: Creating query engine from existing index...")
+                    self.query_engine = self.index.as_query_engine(llm=self.llm)
+                    print("[Info]: Successfully loaded existing index")
+                    return
+
+                except Exception as e:
+                    print(f"[Warning]: Failed to load existing index: {e}")
+                    print("[Info]: Will rebuild index from scratch...")
+                    # Remove corrupted index
+                    import shutil
+                    shutil.rmtree(self.knowledge_index_dir)
+
+            print("[Info]: Building index from scratch...")
 
             # Load all documents
             all_documents = []
@@ -118,11 +175,10 @@ class KnowledgeBase:
             )
 
             # Save the index
-            print("[Info]: Saving index...")
+            print(f"[Info]: Saving index to {self.knowledge_index_dir}")
             self.index.storage_context.persist(persist_dir=self.knowledge_index_dir)
-            print(f"[Info]: Index saved to {self.knowledge_index_dir}")
 
-            # Create query engine & retriver
+            # Create query engine
             print("[Info]: Creating query engine...")
             self.query_engine = self.index.as_query_engine(llm=self.llm)
 

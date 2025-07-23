@@ -10,6 +10,9 @@ When you receive a request to generate test code:
    6. Present your code in ```python code blocks with a filename directive as the first line
    7. Use '# filename: test_<name>.py' at the start of code blocks to specify the filename
    8. If you receive feedback from the review agent, incorporate their suggestions and generate improved code
+   9. To move the tensor to device, use `.to(device)` method
+   10. Always add code for : backend = 'hccl' if 'hccl' in available_backends else ('nccl' if 'nccl' in available_backends else 'gloo')
+       And, use this backend in init_process_group() function call.
 
     **MANDATORY**: ALWAYS include a main execution block that runs the tests. Your code MUST include either:
     - Make sure the backend='hccl' in dist.init_process_group() function call.

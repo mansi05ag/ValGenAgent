@@ -639,7 +639,7 @@ def main():
     #     print("Please ensure you have proper access to Intel's internal API")
     #     sys.exit(1)
 
-    print("Multi-Agent Test Automation System v2")
+    print("Multi-Agent Test Automation System")
     print("=" * 40)
     print(f"Test Plan: {args.test_plan}")
     print(f"Output Directory: {args.output_dir}")
