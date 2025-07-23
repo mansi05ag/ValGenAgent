@@ -32,7 +32,7 @@ from prompts.test_coordinator_system_prompt import TEST_COORDINATOR_AGENT_SYSTEM
 load_dotenv()
 
 # Get Intel API key
-api_key = get_openai_api_key()
+# api_key = get_openai_api_key()
 
 
 # Configure autogen for Intel's internal API
@@ -156,7 +156,7 @@ class MessageLogger:
 
 
 class CodeGenAgent(autogen.AssistantAgent):
-    def __init__(self, logger):
+    def __init__(self, logger, api_key: Optional[str] = None):
         super().__init__(
             name="TestGenerationAgent",
             llm_config=llm_config,
@@ -299,7 +299,7 @@ class MultiAgentTestOrchestrator:
             raise FileNotFoundError(f"The source code directory '{PYC_CODE}' does not exist.")
 
         # Initialize the three agents
-        self.codegen_agent = CodeGenAgent(self.logger)
+        self.codegen_agent = CodeGenAgent(self.logger, api_key=os.getenv("OPENAI_API_KEY"))
         self.kb = self.codegen_agent.build_knowledge_base(
             code_dirs=[PYC_CODE],
             urls=URLS_LIST
@@ -626,18 +626,18 @@ def main():
         sys.exit(1)
 
     # Check for required environment variables - using Intel's internal API
-    try:
-        test_key = get_openai_api_key()
-        if not test_key:
-            print("ERROR: Failed to obtain Intel API key")
-            print("Please ensure you have proper access to Intel's internal API")
-            sys.exit(1)
-        else:
-            print("Successfully obtained Intel API key")
-    except Exception as e:
-        print(f"ERROR: Failed to get Intel API key: {str(e)}")
-        print("Please ensure you have proper access to Intel's internal API")
-        sys.exit(1)
+    # try:
+    #     test_key = get_openai_api_key()
+    #     if not test_key:
+    #         print("ERROR: Failed to obtain Intel API key")
+    #         print("Please ensure you have proper access to Intel's internal API")
+    #         sys.exit(1)
+    #     else:
+    #         print("Successfully obtained Intel API key")
+    # except Exception as e:
+    #     print(f"ERROR: Failed to get Intel API key: {str(e)}")
+    #     print("Please ensure you have proper access to Intel's internal API")
+    #     sys.exit(1)
 
     print("Multi-Agent Test Automation System v2")
     print("=" * 40)

@@ -13,7 +13,7 @@ from openai import OpenAI
 # Load environment variables
 load_dotenv()
 
-def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[Dict[str, Any], str]:
+def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[Dict[str, Any], str]:
     """
     Generate a test plan for a specified feature using Google's Gemini API in JSON format.
 
@@ -36,7 +36,7 @@ def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature
     client = OpenAI(api_key=openai.api_key, base_url=base_url)
 
     # Start with base prompt
-    base_prompt = f"""Generate a detailed test plan for validating {feature_name} in PyTorch.
+    base_prompt = f"""Generate a detailed test plan for validating the following feature in PyTorch.
     The test plan should include:
     1. Test categories
     2. Test cases with clear steps
@@ -48,7 +48,7 @@ def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature
 
     Format the response as a JSON with the following structure:
     {{
-        "feature_name": "{feature_name}",
+        "feature_name": "{{feature_name}}",
         "test_categories": [
             {{
                 "name": "category_name",
@@ -75,7 +75,7 @@ def generate_test_plan(feature_name: str, api_key: Optional[str] = None, feature
         base_prompt += f"\n\nConsider this additional feature information while generating the test plan:\n{feature_info_str}"
 
     if verbose:
-        print(f"Generating test plan for feature: {feature_name}")
+        print(f"Generating test plan for feature: ")
         if feature_info:
             print(f"Using feature info: {feature_info}")
 
@@ -191,7 +191,6 @@ def create_test_plan_document(test_plan: Dict[str, Any], output_file: str) -> No
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(description='Generate test plan for PyTorch feature')
-    parser.add_argument('--feature', required=True, help='Name of the feature to test')
     parser.add_argument('--output', required=True, help='Output file path for test plan document')
     parser.add_argument('--json', required=True, help='Output file path for test plan JSON')
     parser.add_argument('--feature-info-file', help='Path to feature info JSON file')
@@ -206,7 +205,6 @@ def main() -> None:
 
     # Generate test plan
     test_plan, raw_response = generate_test_plan(
-        args.feature,
         feature_info=feature_info,
         verbose=args.verbose
     )

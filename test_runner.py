@@ -40,16 +40,14 @@ class TestResult:
 class TestWorkflowRunner:
     """Manages the end-to-end test workflow"""
 
-    def __init__(self, feature_name: str, output_dir: str, verbose: bool = False,
-                 test_plan_file: Optional[str] = None, feature_info: Optional[Dict] = None,
+    def __init__(self, output_dir: str, verbose: bool = False,
+                 test_plan_file: Optional[str] = None,
                  feature_info_file: Optional[str] = None, api_key = None,
                  generate_plan: bool = True, run_automation: bool = True):
-        self.feature_name = feature_name
         self.output_dir = Path(output_dir)
         self.verbose = verbose
         self.test_plan_file = test_plan_file
         self.api_key = api_key or get_openai_api_key()
-        self.feature_info = feature_info
         self.feature_info_file = feature_info_file
         self.generate_plan = generate_plan
         self.run_automation = run_automation
@@ -59,8 +57,8 @@ class TestWorkflowRunner:
 
     def load_feature_info(self) -> Dict:
         """Load feature information from file if provided."""
-        if self.feature_info:
-            return self.feature_info
+        # if self.feature_info:
+        #     return self.feature_info
 
         if self.feature_info_file and os.path.exists(self.feature_info_file):
             try:
@@ -77,16 +75,14 @@ class TestWorkflowRunner:
             print(f"Using existing test plan: {self.test_plan_file}")
             return True, self.test_plan_file
 
-        print("Generating test plan...")
-        test_plan_file = self.output_dir / f"{self.feature_name}_test_plan.docx"
-        test_plan_json = self.output_dir / f"{self.feature_name}_test_plan.json"
+        test_plan_file = self.output_dir / f"sample_test_plan.docx"
+        test_plan_json = self.output_dir / f"sample_test_plan.json"
 
         try:
             feature_info = self.load_feature_info()
             cmd = [
-            sys.executable,
-            "test_plangenerator.py",
-            "--feature", self.feature_name,
+                sys.executable,
+                "test_plangenerator.py",
                 "--output", str(test_plan_file),
                 "--json", str(test_plan_json)
             ]
@@ -118,7 +114,7 @@ class TestWorkflowRunner:
         try:
             cmd = [
             sys.executable,
-            "agents/test_automation_agent_v3.py",
+            "agents/test_codegen_agent.py",
                 "--test-plan", test_plan_file,
                 "--output-dir", str(self.output_dir / "generated_tests")
             ]
@@ -201,7 +197,6 @@ class TestWorkflowRunner:
         print("=" * 60)
         print(f"Test Workflow Configuration")
         print("=" * 60)
-        print(f"Feature: {self.feature_name}")
         print(f"Output Directory: {self.output_dir}")
         print(f"Generate Test Plan: {'Yes' if self.generate_plan else 'No'}")
         print(f"Run Test Automation: {'Yes' if self.run_automation else 'No'}")
@@ -288,22 +283,18 @@ def main() -> None:
         epilog="""
 Examples:
   # Run complete workflow (generate plan + run automation)
-  python test_workflow_runner.py --feature collectives
+  python test_runner.py --feature-input path/to/feature_input_json_file --output-dir path/to/output_dir
 
   # Only generate test plan
-  python test_workflow_runner.py --feature collectives --generate-plan-only
+  python test_runner.py --feature-input path/to/feature_input_json_file --generate-plan-only --output-dir path/to/output_dir
 
   # Only run test automation (requires existing test plan)
-  python test_workflow_runner.py --feature collectives --test-automation-only --test-plan path/to/plan.docx
-
-  # Run automation with auto-discovery of existing test plan
-  python test_workflow_runner.py --feature collectives --test-automation-only
+  python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir path/to/output_dir
         """
     )
-    parser.add_argument('--feature', required=True, help='Name of the feature to test')
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
-    parser.add_argument('--feature-info', help='Path to feature info JSON file')
+    parser.add_argument('--feature-input', help='Path to feature info JSON file')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
 
     # Step control arguments
@@ -331,11 +322,9 @@ Examples:
         print("Mode: Complete workflow (generate plan + test automation)")
 
     runner = TestWorkflowRunner(
-        feature_name=args.feature,
         output_dir=args.output_dir,
         verbose=args.verbose,
         test_plan_file=args.test_plan,
-        feature_info_file=args.feature_info,
         generate_plan=generate_plan,
         run_automation=run_automation
     )
