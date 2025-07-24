@@ -23,8 +23,13 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
+
 # Import the new OpenAI API key utility
 from utils.openai_api_key_utils import get_openai_api_key
+
+# Import the modules directly
+from test_plangenerator import generate_test_plan_files
+from agents.test_codegen_agent import run_test_automation
 
 # Load environment variables
 load_dotenv()
@@ -51,6 +56,9 @@ class TestWorkflowRunner:
         self.feature_info_file = feature_info_file
         self.generate_plan = generate_plan
         self.run_automation = run_automation
+
+        # Initialize feature_name (will be set when loading feature info)
+        self.feature_name = "sample"
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -79,78 +87,71 @@ class TestWorkflowRunner:
             feature_info = self.load_feature_info()
 
             # Extract name from feature_info and create filename
-            feature_name = "sample"  # default name
             if feature_info and 'name' in feature_info:
                 feature_name = feature_info['name']
                 # Clean the name for use as filename (remove spaces, special chars)
                 feature_name = "".join(c for c in feature_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
                 feature_name = feature_name.replace(' ', '_').lower()
+                self.feature_name = feature_name  # Store for use in other methods
 
-            test_plan_file = self.output_dir / f"{feature_name}_test_plan.docx"
-            test_plan_json = self.output_dir / f"{feature_name}_test_plan.json"
+            test_plan_file = self.output_dir / f"{self.feature_name}_test_plan.docx"
+            test_plan_json = self.output_dir / f"{self.feature_name}_test_plan.json"
 
-            cmd = [
-                sys.executable,
-                "test_plangenerator.py",
-                "--output", str(test_plan_file),
-                "--json", str(test_plan_json)
-            ]
-
+            feature_info_path = None
             if feature_info:
                 feature_info_path = self.output_dir / "temp_feature_info.json"
                 with open(feature_info_path, 'w') as f:
                     json.dump(feature_info, f)
-                cmd.extend(["--feature-info-file", str(feature_info_path)])
 
-            if self.verbose:
-                cmd.append("--verbose")
+            success = generate_test_plan_files(
+                output_file=str(test_plan_file),
+                json_file=str(test_plan_json),
+                feature_info_file=str(feature_info_path) if feature_info_path else None,
+                verbose=self.verbose
+            )
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                print(f"Error generating test plan: {result.stderr}")
+            if not success:
+                print("Error generating test plan")
                 return False, ""
+
+            # Clean up temporary file
+            if feature_info_path and feature_info_path.exists():
+                feature_info_path.unlink()
 
             # Return the JSON file path for the test automation agent to use
             return True, str(test_plan_json)
 
         except Exception as e:
             print(f"Error in test plan generation: {e}")
+            import traceback
+            traceback.print_exc()
             return False, ""
 
     def run_test_automation(self, test_plan_file: str) -> bool:
         """Run test automation agent to generate and execute tests."""
         print("Running test automation...")
         try:
-            cmd = [
-            sys.executable,
-            "agents/test_codegen_agent.py",
-                "--test-plan", test_plan_file,
-                "--output-dir", str(self.output_dir / "generated_tests")
-            ]
+            output_dir = str(self.output_dir / "generated_tests")
 
-            if self.verbose:
-                cmd.append("--verbose")
+            # Call the function directly instead of subprocess
+            success = run_test_automation(
+                test_plan_path=test_plan_file,
+                output_dir=output_dir,
+                max_retries=2,  # default value
+                max_context=25,  # default value
+                verbose=self.verbose
+            )
 
-            # Use Popen for real-time output streaming
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1, universal_newlines=True) as process:
-
-                # Stream output in real-time
-                for line in process.stdout:
-                    print(line.rstrip())
-
-                # Wait for process to complete
-                process.wait()
-
-                if process.returncode != 0:
-                    print(f"Error in test automation: Process exited with code {process.returncode}")
-                    return False
+            if not success:
+                print("Error in test automation: Test generation failed")
+                return False
 
             return True
 
         except Exception as e:
             print(f"Error running test automation: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def collect_test_results(self) -> List[TestResult]:
@@ -286,7 +287,7 @@ class TestWorkflowRunner:
             return True
 
 def main() -> None:
-    """Main entry point."""
+
     parser = argparse.ArgumentParser(
         description='Run the complete test workflow',
         formatter_class=argparse.RawDescriptionHelpFormatter,

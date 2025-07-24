@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import argparse
 import re
@@ -9,11 +10,12 @@ from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 import openai
 from openai import OpenAI
+from prompts.test_plan_generation_system_prompt import TEST_PLAN_SYSTEM_PROMPT
 
 # Load environment variables
 load_dotenv()
 
-def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[Dict[str, Any], str]:
+def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[bool, Dict[str, Any], str]:
     """
     Generate a test plan for a specified feature in JSON format.
 
@@ -24,206 +26,163 @@ def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dic
         verbose (bool): Whether to print verbose output
 
     Returns:
-        dict: Generated test plan in JSON format
-        str: Raw response text for debugging
+        tuple: (success: bool, test_plan: Dict[str, Any], raw_response: str)
+               success: True if generation was successful, False otherwise
+               test_plan: Generated test plan in JSON format (empty dict if failed)
+               raw_response: Raw response text for debugging (empty string if failed)
     """
-    openai.api_key = api_key or os.getenv("OPENAI_API_KEY")
-    if not openai.api_key:
-        raise ValueError("OpenAI API key not found. Provide it as an argument or set the OPENAI_API_KEY environment variable.")
-
-    # Use Intel's internal API if needed, otherwise use standard OpenAI endpoint
-    base_url = "https://apis-internal.intel.com/generativeaiinference/v4"
-    client = OpenAI(api_key=openai.api_key, base_url=base_url)
-
-    # Start with base prompt
-    base_prompt = f"""Generate a detailed test plan for validating the {feature_info['name']} feature in PyTorch.
-    The test plan should include:
-    1. Test category name
-    2. Test cases with the following information:
-        - Test case ID : to link test plan and actual test,
-        - Description : Information about what the test is doing. Any corener cases, that should be taken care during implementation. The expected result. Implementation details. Parameterize the test on data types, tensor sizes and world size. How to check the Performance of the test.
-    Note:
-    1. Ensure that the test plan does not have any duplicate test cases. The test cases should be unique and not repeated across categories.
-    2. Do not create separate tests for each datatypes, or tensor sizes. Instead, parameterize the test cases to cover all relevant data types and tensor sizes in a single test case.
-    3. Each test case should have a unique ID that can be linked to the actual test implementation.
-
-
-    The test plan should be structured as a JSON object with the following format:
-    {{
-        "test_plan" : "{feature_info['name']}"
-        tests:
-        {{
-            "test_category": "API name for which the below test cases are written",
-            "implementation_file": "name/of/implementation/file.py",
-            "test_cases": {
-                {
-                    "test_id": "to link test plan and actual test",
-                    "description": "test_case_description",
-                    "test_id": "to link test plan and actual test",
-                    "description": "test_case_description",
-                    "test_id": "to link test plan and actual test",
-                    "description": "test_case_description"
-                }
-            },
-            "test_category": "API name for which the below test cases are written",
-            "implementation_file": "name/of/implementation/file.py",
-            "test_cases": {
-                {
-                    "test_id": "to link test plan and actual test",
-                    "description": "test_case_description",
-                    "test_id": "to link test plan and actual test",
-                    "description": "test_case_description",
-                    "test_id": "to link test plan and actual test"
-                }
-            },
-        }}
-    }}
-    """
-
-    # Add feature info to prompt if available
-    if feature_info:
-        feature_info_str = json.dumps(feature_info, indent=2)
-        base_prompt += f"\n\nConsider the feature information while generating the test plan:\n {feature_info_str}"
-
-    print(f"Generating test plan for feature: ")
-    if feature_info:
-        print(f"Using feature info: {feature_info}")
-
     try:
-        print(f"Base prompt for test plan generation:\n{base_prompt}\n")
-        # Generate test plan using Gemini
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a testing expert that creates reliable JSON-formatted test plans. \n Do not stop output until the entire JSON object is fully completed. \n Ensure every opening { or [ has a matching closing } or ]. \n Do not output explanatory text or partial data. \n If the JSON is large, always generate the full object in one response. \n If truncation is likely, indicate it clearly with a comment at the end like // TRUNCATED. \n All tests for a feature or collective must go into one file."},
-                {"role": "user", "content": base_prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.3,        # Lower temperature for more consistent formatting
-            max_completion_tokens=5000
-        )
+        openai.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not openai.api_key:
+            print("Error: OpenAI API key not found. Provide it as an argument or set the OPENAI_API_KEY environment variable.")
+            return False, {}, ""
 
-        # Get the raw text response
-        response_text = response.choices[0].message.content
+        # Use Intel's internal API if needed, otherwise use standard OpenAI endpoint
+        base_url = "https://apis-internal.intel.com/generativeaiinference/v4"
+        client = OpenAI(api_key=openai.api_key, base_url=base_url)
 
-        # Extract and parse JSON from response
-        # response_text = response.text
-        # Find JSON content between triple backticks if present
-        json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
-        if json_match:
-            response_text = json_match.group(1)
+        base_prompt = TEST_PLAN_SYSTEM_PROMPT
+        if feature_info:
+            feature_info_str = json.dumps(feature_info, indent=2)
+            base_prompt += f"\n\nConsider the feature information while generating the test plan:\n {feature_info_str}"
+
+        print(f"Generating test plan for feature: ")
+        if feature_info:
+            print(f"Using feature info: {feature_info}")
 
         try:
-            test_plan = json.loads(response_text)
-        except json.JSONDecodeError:
-            # Try to fix common JSON formatting issues
-            fixed_text = repair_json(response_text)
-            test_plan = json.loads(fixed_text)
+            print(f"Base prompt for test plan generation:\n{base_prompt}\n")
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a testing expert that creates reliable JSON-formatted test plans. \n Do not stop output until the entire JSON object is fully completed. \n Ensure every opening { or [ has a matching closing } or ]. \n Do not output explanatory text or partial data. \n If the JSON is large, always generate the full object in one response. \n If truncation is likely, indicate it clearly with a comment at the end like // TRUNCATED. \n All tests for a feature or collective must go into one file."},
+                    {"role": "user", "content": base_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,        # Lower temperature for more consistent formatting
+                max_completion_tokens=5000
+            )
 
-        if verbose:
-            print("Successfully generated test plan")
+            # Get the raw text response
+            response_text = response.choices[0].message.content
+            try:
+                test_plan = json.loads(response_text)
+            except json.JSONDecodeError:
+                print(f"Error generating test plan in json format: {str(e)}")
+                return False, {}, ""
 
-        return test_plan, response_text
+            if verbose:
+                print("Successfully generated test plan")
+
+            return True, test_plan, response_text
+
+        except Exception as e:
+            print(f"Error during API call or JSON parsing: {str(e)}")
+            return False, {}, ""
 
     except Exception as e:
         print(f"Error generating test plan: {str(e)}")
-        raise
+        return False, {}, ""
 
-def repair_json(text: str) -> str:
-    """Repair common JSON formatting issues."""
-    # Fix unterminated strings
-    lines = text.split('\n')
-    in_quote = False
-    fixed_lines = []
+def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, feature_info: str) -> bool:
+    """Create a Word document from the test plan.
 
-    for line in lines:
-        for i, char in enumerate(line):
-            if char == '"' and (i == 0 or line[i-1] != '\\'):
-                in_quote = not in_quote
-        if in_quote:
-            line = line + '"'
-            in_quote = False
-        fixed_lines.append(line)
+    Args:
+        test_plan: The test plan dictionary
+        output_file: Path to save the DOCX file
+        feature_info: Feature information (dict or string)
 
-    text = '\n'.join(fixed_lines)
+    Returns:
+        bool: True if document was created successfully, False otherwise
+    """
+    try:
+        doc = Document()
 
-    # Common JSON fixes
-    text = re.sub(r"(?<![\\])\'", '"', text)  # Replace single quotes with double quotes
-    text = re.sub(r",(\s*[}\]])", r"\1", text)  # Remove trailing commas
-    text = re.sub(r":\s*,", ": null,", text)  # Replace empty values with null
-    text = re.sub(r":\s*}", ": null}", text)  # Replace empty values with null
+        # Add title - handle both feature_info as dict or string
+        if isinstance(feature_info, dict) and 'name' in feature_info:
+            title_text = f'Test Plan: {feature_info["name"]}'
+        elif isinstance(feature_info, str):
+            title_text = f'Test Plan: {feature_info}'
+        elif 'test_category' in test_plan:
+            title_text = f'Test Plan: {test_plan["test_category"]}'
+        else:
+            title_text = 'Test Plan'
 
-    return text
+        title = doc.add_heading(title_text, 0)
+        title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, feature_info: str) -> None:
-    """Create a Word document from the test plan."""
-    doc = Document()
+        # Handle different JSON structure
+        if 'test_category' in test_plan and 'test_cases' in test_plan:
+            cat_heading = doc.add_heading(f'Category: {test_plan["test_category"]}', level=1)
+            for test_case in test_plan['test_cases']:
 
-    # Add title - handle both feature_info as dict or string
-    if isinstance(feature_info, dict) and 'name' in feature_info:
-        title_text = f'Test Plan: {feature_info["name"]}'
-    elif isinstance(feature_info, str):
-        title_text = f'Test Plan: {feature_info}'
-    elif 'test_category' in test_plan:
-        title_text = f'Test Plan: {test_plan["test_category"]}'
-    else:
-        title_text = 'Test Plan'
+                tc_heading = doc.add_heading(f'Test Case {test_case["test_id"]}', level=2)
+                doc.add_paragraph(f'Description: {test_case["description"]}')
 
-    title = doc.add_heading(title_text, 0)
-    title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                # Add spacing between test cases
+                doc.add_paragraph()
+        doc.save(output_file)
+        return True
 
-    # Handle different JSON structure
-    if 'test_category' in test_plan and 'test_cases' in test_plan:
-        # New simplified structure with single category
-        # Add category heading
-        cat_heading = doc.add_heading(f'Category: {test_plan["test_category"]}', level=1)
+    except Exception as e:
+        print(f"Error creating Word document: {e}")
+        return False
 
-        # Add test cases
-        for test_case in test_plan['test_cases']:
-            # Test case title using test_id
-            tc_heading = doc.add_heading(f'Test Case {test_case["test_id"]}', level=2)
+def generate_test_plan_files(output_file: str, json_file: str, feature_info_file: Optional[str] = None, verbose: bool = False) -> bool:
+    """
+    Generate test plan files (both DOCX and JSON) from feature information.
 
-            # Description (which contains all the test details)
-            doc.add_paragraph(f'Description: {test_case["description"]}')
+    Args:
+        output_file: Path for the DOCX output file
+        json_file: Path for the JSON output file
+        feature_info_file: Optional path to feature info JSON file
+        verbose: Enable verbose output
 
-            # Add spacing between test cases
-            doc.add_paragraph()
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Load feature info if provided
+        feature_info = None
+        if feature_info_file and os.path.exists(feature_info_file):
+            try:
+                with open(feature_info_file, 'r') as f:
+                    feature_info = json.load(f)
+            except Exception as e:
+                print(f"Error loading feature info file: {e}")
+                return False
 
-    # Save the document
-    doc.save(output_file)
+        # Generate test plan
+        success, test_plan, raw_response = generate_test_plan(
+            feature_info=feature_info,
+            verbose=verbose
+        )
 
-def main() -> None:
-    """Main entry point."""
-    parser = argparse.ArgumentParser(description='Generate test plan for PyTorch feature')
-    parser.add_argument('--output', required=True, help='Output file path for test plan document')
-    parser.add_argument('--json', required=True, help='Output file path for test plan JSON')
-    parser.add_argument('--feature-info-file', help='Path to feature info JSON file')
-    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
-    args = parser.parse_args()
+        if not success:
+            print("Failed to generate test plan")
+            return False
 
-    # Load feature info if provided
-    feature_info = None
-    if args.feature_info_file and os.path.exists(args.feature_info_file):
-        with open(args.feature_info_file, 'r') as f:
-            feature_info = json.load(f)
+        # Save test plan as JSON
+        try:
+            with open(json_file, 'w') as f:
+                json.dump(test_plan, f, indent=2)
+        except Exception as e:
+            print(f"Error saving JSON file: {e}")
+            return False
 
-    # Generate test plan
-    test_plan, raw_response = generate_test_plan(
-        feature_info=feature_info,
-        verbose=args.verbose
-    )
+        # Create Word document
+        if not create_test_plan_document(test_plan, output_file, feature_info):
+            print("Failed to create Word document")
+            return False
 
-    # Save test plan as JSON
-    with open(args.json, 'w') as f:
-        json.dump(test_plan, f, indent=2)
+        if verbose:
+            print(f"Test plan saved to: {output_file}")
+            print(f"JSON test plan saved to: {json_file}")
 
-    # import pdb; pdb.set_trace()  # Debugging breakpoint
-    # Create Word document
-    create_test_plan_document(test_plan, args.output, feature_info)
+        return True
 
-    if args.verbose:
-        print(f"Test plan saved to: {args.output}")
-        print(f"JSON test plan saved to: {args.json}")
-
-if __name__ == '__main__':
-    main()
+    except Exception as e:
+        print(f"Error generating test plan files: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

@@ -23,7 +23,16 @@ from utils.openai_endpoints import (
     INFERENCE_BASE_URL,
     MODEL_INFERENCE
 )
-from vector_index.generate_vector_db import KnowledgeBase
+
+# Conditional import for vector index to handle missing dependencies
+try:
+    from vector_index.generate_vector_db import KnowledgeBase
+    VECTOR_DB_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Vector database not available due to missing dependencies: {e}")
+    VECTOR_DB_AVAILABLE = False
+    KnowledgeBase = None
+
 from prompts.code_agent_system_prompt import CODE_AGENT_SYSTEM_PROMPT
 from prompts.review_agent_system_prompt import REVIEW_AGENT_SYSTEM_PROMPT
 from prompts.test_coordinator_system_prompt import TEST_COORDINATOR_AGENT_SYSTEM_PROMPT
@@ -73,63 +82,72 @@ class TestPlanParser:
         if not self.is_json:
             self.document = Document(file_path)
 
-    def extract_test_cases(self) -> Tuple[List[Dict[str, Any]], List[str]]:
-        if self.is_json:
-            return self._extract_from_json()
-        else:
-            return self._extract_from_docx()
+    def extract_test_cases(self) -> Tuple[bool, List[Dict[str, Any]], List[str]]:
+        """Extract test cases from the test plan file.
 
-    def _extract_from_json(self) -> Tuple[List[Dict[str, Any]], List[str]]:
+        Returns:
+            tuple: (success: bool, test_cases: List[Dict], implementation_files: List[str])
+        """
+        try:
+            if self.is_json:
+                return self._extract_from_json()
+            else:
+                return self._extract_from_docx()
+        except Exception as e:
+            print(f"Error extracting test cases: {e}")
+            return False, [], []
+
+    def _extract_from_json(self) -> Tuple[bool, List[Dict[str, Any]], List[str]]:
         try:
             with open(self.file_path, 'r') as f:
                 test_plan = json.load(f)
-            
+
             test_cases = []
             implementation_files = set()
-            
+
             # Handle different JSON structures
             if 'tests' in test_plan:
                 tests_section = test_plan['tests']
-                
+
                 # Check if tests is a list (array of test categories)
                 if isinstance(tests_section, list):
                     for test_category in tests_section:
                         implementation_file = test_category.get('implementation_file')
                         if implementation_file:
                             implementation_files.add(implementation_file)
-                        
+
                         # Extract test cases and add implementation file info to each
                         for test_case in test_category.get('test_cases', []):
                             enhanced_test_case = test_case.copy()
                             enhanced_test_case['implementation_file'] = implementation_file
                             enhanced_test_case['test_category'] = test_category.get('test_category', '')
-                            
+
                             # Map test_id to id for compatibility
                             if 'test_id' in enhanced_test_case and 'id' not in enhanced_test_case:
                                 enhanced_test_case['id'] = enhanced_test_case['test_id']
-                            
+
                             test_cases.append(enhanced_test_case)
-                
+
                 # Check if it's the new single test category format (tests as object)
                 elif isinstance(tests_section, dict) and 'test_category' in tests_section and 'implementation_file' in tests_section:
                     # New format: single test category with implementation file
                     implementation_file = tests_section.get('implementation_file')
                     if implementation_file:
                         implementation_files.add(implementation_file)
-                    
+
                     # Extract test cases and add implementation file info to each
                     for test_case in tests_section.get('test_cases', []):
                         # Create a copy of the test case and add implementation file
                         enhanced_test_case = test_case.copy()
                         enhanced_test_case['implementation_file'] = implementation_file
                         enhanced_test_case['test_category'] = tests_section.get('test_category', '')
-                        
+
                         # Map test_id to id for compatibility
                         if 'test_id' in enhanced_test_case and 'id' not in enhanced_test_case:
                             enhanced_test_case['id'] = enhanced_test_case['test_id']
-                        
+
                         test_cases.append(enhanced_test_case)
-            
+
             # Handle the old format with test_categories directly
             elif 'test_categories' in test_plan:
                 for test_category in test_plan['test_categories']:
@@ -137,56 +155,60 @@ class TestPlanParser:
                         implementation_files.add(test_category['implementation_file'])
                         for test_case in test_category.get('test_cases', []):
                             test_cases.append(test_case)
-            
+
             # Handle simple format with direct test_cases (like the original pytorch_collective_operations format)
             elif 'test_cases' in test_plan:
                 for test_case in test_plan['test_cases']:
                     # For this format, we'll create a default implementation file name
                     test_category = test_plan.get('test_category', 'default_tests')
                     impl_file = f"test_{test_category.lower().replace(' ', '_').replace('.', '_')}.py"
-                    
+
                     enhanced_test_case = test_case.copy()
                     enhanced_test_case['implementation_file'] = impl_file
                     enhanced_test_case['test_category'] = test_category
-                    
+
                     # Map test_id to id for compatibility
                     if 'test_id' in enhanced_test_case and 'id' not in enhanced_test_case:
                         enhanced_test_case['id'] = enhanced_test_case['test_id']
-                    
+
                     test_cases.append(enhanced_test_case)
                     implementation_files.add(impl_file)
-            
-            return test_cases, list(implementation_files)
-            
+
+            return True, test_cases, list(implementation_files)
+
         except Exception as e:
             print(f"Error reading JSON test plan: {e}")
             import traceback
             traceback.print_exc()
-            return [], []
+            return False, [], []
 
-    def _extract_from_docx(self) -> Tuple[List[Dict[str, Any]], List[str]]:
-        test_cases = []
-        implementation_files = set()
-        current_test_case = {}
-        for paragraph in self.document.paragraphs:
-            text = paragraph.text.strip()
-            if not text:
-                continue
-            if 'Implementation file:' in text:
-                file_name = text.split('Implementation file:')[1].strip()
-                if file_name.endswith('.py'):
-                    implementation_files.add(file_name)
+    def _extract_from_docx(self) -> Tuple[bool, List[Dict[str, Any]], List[str]]:
+        try:
+            test_cases = []
+            implementation_files = set()
+            current_test_case = {}
+            for paragraph in self.document.paragraphs:
+                text = paragraph.text.strip()
+                if not text:
+                    continue
+                if 'Implementation file:' in text:
+                    file_name = text.split('Implementation file:')[1].strip()
+                    if file_name.endswith('.py'):
+                        implementation_files.add(file_name)
+                        if current_test_case:
+                            current_test_case['implementation_file'] = file_name
+                if re.match(r'^(Test Case|TC)\s*\d+:', text, re.IGNORECASE):
                     if current_test_case:
-                        current_test_case['implementation_file'] = file_name
-            if re.match(r'^(Test Case|TC)\s*\d+:', text, re.IGNORECASE):
-                if current_test_case:
-                    test_cases.append(current_test_case)
-                current_test_case = self._init_test_case(text)
-            elif current_test_case:
-                self._update_test_case(current_test_case, text)
-        if current_test_case:
-            test_cases.append(current_test_case)
-        return test_cases, list(implementation_files)
+                        test_cases.append(current_test_case)
+                    current_test_case = self._init_test_case(text)
+                elif current_test_case:
+                    self._update_test_case(current_test_case, text)
+            if current_test_case:
+                test_cases.append(current_test_case)
+            return True, test_cases, list(implementation_files)
+        except Exception as e:
+            print(f"Error extracting from DOCX: {e}")
+            return False, [], []
 
     def _init_test_case(self, text: str) -> Dict[str, Any]:
         return {
@@ -232,13 +254,17 @@ class CodeGenAgent(autogen.AssistantAgent):
             system_message=CODE_AGENT_SYSTEM_PROMPT
         )
         self.logger = logger
-        # Initialize knowledge base
-        self.kb = KnowledgeBase(
-            api_key=api_key,
-            embed_base_url=EMBEDDING_BASE_URL,
-            llm_base_url=INFERENCE_BASE_URL ,
-            model_name=MODEL_INFERENCE,
-        )
+        # Initialize knowledge base only if available
+        if VECTOR_DB_AVAILABLE and KnowledgeBase:
+            self.kb = KnowledgeBase(
+                api_key=api_key,
+                embed_base_url=EMBEDDING_BASE_URL,
+                llm_base_url=INFERENCE_BASE_URL,
+                model_name=MODEL_INFERENCE,
+            )
+        else:
+            self.kb = None
+            print("Warning: Knowledge base not initialized due to missing dependencies")
 
     def build_knowledge_base(self, code_dirs, urls):
         """Build the knowledge base
@@ -246,8 +272,20 @@ class CodeGenAgent(autogen.AssistantAgent):
         Args:
             code_dirs (list): List of directories to index
             urls (list): List of URLs to index
+
+        Returns:
+            bool: True if knowledge base was built successfully, False otherwise
         """
-        self.kb.build_index(code_dirs, urls)
+        if self.kb:
+            try:
+                self.kb.build_index(code_dirs, urls)
+                return True
+            except Exception as e:
+                print(f"Warning: Failed to build knowledge base: {e}")
+                return False
+        else:
+            print("Warning: Cannot build knowledge base - dependencies not available")
+            return False
 
 # Agent 2: Code Review
 class CodeReviewAgent(autogen.AssistantAgent):
@@ -369,10 +407,13 @@ class MultiAgentTestOrchestrator:
 
         # Initialize the three agents
         self.codegen_agent = CodeGenAgent(self.logger, api_key=os.getenv("OPENAI_API_KEY"))
-        self.kb = self.codegen_agent.build_knowledge_base(
+        kb_success = self.codegen_agent.build_knowledge_base(
             code_dirs=[PYC_CODE],
             urls=URLS_LIST
         )
+        if not kb_success:
+            self.logger.log("Orchestrator", "Warning: Knowledge base initialization failed, proceeding without it")
+
         self.review_agent = CodeReviewAgent(self.logger)
         self.runner_agent = TestRunnerUserProxy(self.logger, output_dir)
 
@@ -409,7 +450,11 @@ class MultiAgentTestOrchestrator:
 
         # Parse test plan
         parser = TestPlanParser(test_plan_path)
-        test_cases, implementation_files = parser.extract_test_cases()
+        success, test_cases, implementation_files = parser.extract_test_cases()
+
+        if not success:
+            self.logger.log("Orchestrator", "ERROR: Failed to parse test plan")
+            return False
 
         if not test_cases:
             self.logger.log("Orchestrator", "ERROR: No test cases found in the test plan")
@@ -454,13 +499,25 @@ class MultiAgentTestOrchestrator:
             # Initialize a fresh group chat for this file
             self.group_chat.messages = []  # Clear previous messages
 
-            # Get context from knowledge base
-            context = self.codegen_agent.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
-            if "[Error]" in context or not context:
-                self.logger.log("Orchestrator", f"ERROR: Failed to retrieve doc chunks for {impl_file}")
-                return False
+            # Get context from knowledge base if available
+            context = ""
+            if self.codegen_agent.kb:
+                try:
+                    context = self.codegen_agent.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
+                    if "[Error]" in context or not context:
+                        self.logger.log("Orchestrator", f"WARNING: Failed to retrieve doc chunks for {impl_file}, proceeding without context")
+                        context = ""
+                except Exception as e:
+                    self.logger.log("Orchestrator", f"WARNING: Error retrieving doc chunks: {e}, proceeding without context")
+                    context = ""
+            else:
+                self.logger.log("Orchestrator", f"WARNING: Knowledge base not available, proceeding without context")
 
-            prompt_with_context = f"Based on the following code context:\n\n{context}\n\n {initial_message}"
+            if context:
+                prompt_with_context = f"Based on the following code context:\n\n{context}\n\n {initial_message}"
+            else:
+                prompt_with_context = initial_message
+
             # Start the conversation
             self.coordinator.initiate_chat(
                 self.manager,
@@ -483,7 +540,9 @@ class MultiAgentTestOrchestrator:
             if success:
                 self.logger.log("Orchestrator", f"SUCCESS: GroupChat completed successfully for {impl_file}")
                 # Save artifacts from the group chat
-                self._save_artifacts_from_chat(impl_file)
+                artifact_saved = self._save_artifacts_from_chat(impl_file)
+                if not artifact_saved:
+                    self.logger.log("Orchestrator", f"Warning: Failed to save artifacts for {impl_file}")
                 return True
             else:
                 self.logger.log("Orchestrator", f"FAILED: GroupChat did not achieve success for {impl_file}")
@@ -543,20 +602,30 @@ class MultiAgentTestOrchestrator:
         self.logger.log("Orchestrator", "No success patterns found in chat messages or logger")
         return False
 
-    def _save_artifacts_from_chat(self, impl_file: str):
-        """Save artifacts from the group chat conversation"""
-        base_name = os.path.splitext(impl_file)[0]
+    def _save_artifacts_from_chat(self, impl_file: str) -> bool:
+        """Save artifacts from the group chat conversation
 
-        # Save the entire conversation log
-        chat_log_file = os.path.join(self.output_dir, f"{base_name}_chat_log.txt")
-        with open(chat_log_file, 'w') as f:
-            f.write("=== GROUP CHAT CONVERSATION LOG ===\n\n")
-            for i, message in enumerate(self.group_chat.messages):
-                f.write(f"Message {i+1} - {message.get('name', 'Unknown')}:\n")
-                f.write(f"{message.get('content', '')}\n")
-                f.write("-" * 50 + "\n")
+        Returns:
+            bool: True if artifacts were saved successfully, False otherwise
+        """
+        try:
+            base_name = os.path.splitext(impl_file)[0]
 
-        self.logger.log("Orchestrator", f"Saved chat log for {impl_file}")
+            # Save the entire conversation log
+            chat_log_file = os.path.join(self.output_dir, f"{base_name}_chat_log.txt")
+            with open(chat_log_file, 'w') as f:
+                f.write("=== GROUP CHAT CONVERSATION LOG ===\n\n")
+                for i, message in enumerate(self.group_chat.messages):
+                    f.write(f"Message {i+1} - {message.get('name', 'Unknown')}:\n")
+                    f.write(f"{message.get('content', '')}\n")
+                    f.write("-" * 50 + "\n")
+
+            self.logger.log("Orchestrator", f"Saved chat log for {impl_file}")
+            return True
+
+        except Exception as e:
+            self.logger.log("Orchestrator", f"Error saving artifacts for {impl_file}: {e}")
+            return False
 
     def _manage_context_length(self):
         """Manage GroupChat context to prevent token overflow while preserving important information"""
@@ -663,70 +732,64 @@ class MultiAgentTestOrchestrator:
             self.logger.log("Orchestrator", f"Error checking generated test files: {str(e)}")
             return False
 
-def main():
-    """Main entry point for the multi-agent test automation system"""
-    parser = argparse.ArgumentParser(
-        description='Multi-agent test automation system using autogen',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-            Example usage:
-            python test_automation_agent_v2.py --test-plan test_results/collectives_test_plan.json
-            python test_automation_agent_v2.py --test-plan test_plan.docx --output-dir my_tests --max-retries 3
-        """
-    )
-    parser.add_argument('--test-plan', required=True,
-                       help='Path to test plan document (JSON or DOCX format)')
-    parser.add_argument('--output-dir', default='generated_tests',
-                       help='Output directory for generated tests (default: generated_tests)')
-    parser.add_argument('--max-retries', type=int, default=2,
-                       help='Maximum retries for code correction (default: 2)')
-    parser.add_argument('--max-context', type=int, default=25,
-                       help='Maximum context messages in GroupChat (default: 25)')
+def run_test_automation(test_plan_path: str, output_dir: str = "generated_tests",
+                       max_retries: int = 2, max_context: int = 25, verbose: bool = False) -> bool:
+    """
+    Run the multi-agent test automation system.
 
-    args = parser.parse_args()
+    Args:
+        test_plan_path: Path to test plan document (JSON or DOCX format)
+        output_dir: Output directory for generated tests
+        max_retries: Maximum retries for code correction
+        max_context: Maximum context messages in GroupChat
+        verbose: Enable verbose output
 
-    # Validate input file
-    if not os.path.exists(args.test_plan):
-        print(f"ERROR: Test plan file '{args.test_plan}' not found")
-        sys.exit(1)
-
-    if not args.test_plan.endswith(('.json', '.docx')):
-        print("ERROR: Test plan must be a JSON or DOCX file")
-        sys.exit(1)
-
-    print("Multi-Agent Test Automation System")
-    print("=" * 40)
-    print(f"Test Plan: {args.test_plan}")
-    print(f"Output Directory: {args.output_dir}")
-    print(f"Max Retries: {args.max_retries}")
-    print(f"Max Context Messages: {args.max_context}")
-    print("=" * 40)
-
+    Returns:
+        bool: True if successful, False otherwise
+    """
     try:
+        # Validate input file
+        if not os.path.exists(test_plan_path):
+            print(f"ERROR: Test plan file '{test_plan_path}' not found")
+            return False
+
+        if not test_plan_path.endswith(('.json', '.docx')):
+            print("ERROR: Test plan must be a JSON or DOCX file")
+            return False
+
+        if verbose:
+            print("Multi-Agent Test Automation System")
+            print("=" * 40)
+            print(f"Test Plan: {test_plan_path}")
+            print(f"Output Directory: {output_dir}")
+            print(f"Max Retries: {max_retries}")
+            print(f"Max Context Messages: {max_context}")
+            print("=" * 40)
+
         # Initialize and run the multi-agent orchestrator
         orchestrator = MultiAgentTestOrchestrator(
-            output_dir=args.output_dir,
-            max_retries=args.max_retries,
-            max_context_messages=args.max_context
+            output_dir=output_dir,
+            max_retries=max_retries,
+            max_context_messages=max_context
         )
 
-        success = orchestrator.orchestrate_test_generation(args.test_plan)
+        success = orchestrator.orchestrate_test_generation(test_plan_path)
 
         if success:
-            print("\nMulti-agent test generation completed successfully!")
-            print(f"Generated tests are available in: {args.output_dir}")
+            if verbose:
+                print("\nMulti-agent test generation completed successfully!")
+                print(f"Generated tests are available in: {output_dir}")
         else:
             print("\nMulti-agent test generation failed!")
-            sys.exit(1)
+
+        return success
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user")
-        sys.exit(1)
+        return False
     except Exception as e:
         print(f"\nUnexpected error: {str(e)}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
+        return False
 
-if __name__ == '__main__':
-    main()
