@@ -15,7 +15,7 @@ load_dotenv()
 
 def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[Dict[str, Any], str]:
     """
-    Generate a test plan for a specified feature using Google's Gemini API in JSON format.
+    Generate a test plan for a specified feature in JSON format.
 
     Args:
         feature_name (str): The name of the feature to create a test plan for
@@ -36,50 +36,61 @@ def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dic
     client = OpenAI(api_key=openai.api_key, base_url=base_url)
 
     # Start with base prompt
-    base_prompt = f"""Generate a detailed test plan for validating the following feature in PyTorch.
+    base_prompt = f"""Generate a detailed test plan for validating the {feature_info['name']} feature in PyTorch.
     The test plan should include:
-    1. Test categories
-    2. Test cases with clear steps
-    3. Expected results
-    4. Implementation details
-    5. Data types to test with
-    6. Edge cases to consider
-    7. Performance considerations
+    1. Test category name
+    2. Test cases with the following information:
+        - Test case ID : to link test plan and actual test,
+        - Description : Information about what the test is doing. Any corener cases, that should be taken care during implementation. The expected result. Implementation details. Parameterize the test on data types, tensor sizes and world size. How to check the Performance of the test.
+    Note:
+    1. Ensure that the test plan does not have any duplicate test cases. The test cases should be unique and not repeated across categories.
+    2. Do not create separate tests for each datatypes, or tensor sizes. Instead, parameterize the test cases to cover all relevant data types and tensor sizes in a single test case.
+    3. Each test case should have a unique ID that can be linked to the actual test implementation.
 
-    Format the response as a JSON with the following structure:
+
+    The test plan should be structured as a JSON object with the following format:
     {{
-        "feature_name": "{{feature_name}}",
-        "test_categories": [
-            {{
-                "name": "category_name",
-                "description": "category_description",
-                "test_cases": [
-                    {{
-                        "id": "TC1",
-                        "title": "test_case_title",
-                        "description": "test_case_description",
-                        "steps": ["step1", "step2", ...],
-                        "expected_results": "expected_results",
-                        "data_types": ["type1", "type2", ...],
-                        "implementation_file": "test_filename.py"
-                    }}
-                ]
-            }}
-        ]
+        "test_plan" : "{feature_info['name']}"
+        tests:
+        {{
+            "test_category": "API name for which the below test cases are written",
+            "implementation_file": "name/of/implementation/file.py",
+            "test_cases": {
+                {
+                    "test_id": "to link test plan and actual test",
+                    "description": "test_case_description",
+                    "test_id": "to link test plan and actual test",
+                    "description": "test_case_description",
+                    "test_id": "to link test plan and actual test",
+                    "description": "test_case_description"
+                }
+            },
+            "test_category": "API name for which the below test cases are written",
+            "implementation_file": "name/of/implementation/file.py",
+            "test_cases": {
+                {
+                    "test_id": "to link test plan and actual test",
+                    "description": "test_case_description",
+                    "test_id": "to link test plan and actual test",
+                    "description": "test_case_description",
+                    "test_id": "to link test plan and actual test"
+                }
+            },
+        }}
     }}
     """
 
     # Add feature info to prompt if available
     if feature_info:
         feature_info_str = json.dumps(feature_info, indent=2)
-        base_prompt += f"\n\nConsider this additional feature information while generating the test plan:\n{feature_info_str}"
+        base_prompt += f"\n\nConsider the feature information while generating the test plan:\n {feature_info_str}"
 
-    if verbose:
-        print(f"Generating test plan for feature: ")
-        if feature_info:
-            print(f"Using feature info: {feature_info}")
+    print(f"Generating test plan for feature: ")
+    if feature_info:
+        print(f"Using feature info: {feature_info}")
 
     try:
+        print(f"Base prompt for test plan generation:\n{base_prompt}\n")
         # Generate test plan using Gemini
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -144,43 +155,36 @@ def repair_json(text: str) -> str:
 
     return text
 
-def create_test_plan_document(test_plan: Dict[str, Any], output_file: str) -> None:
+def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, feature_info: str) -> None:
     """Create a Word document from the test plan."""
     doc = Document()
 
-    # Add title
-    title = doc.add_heading(f'Test Plan: {test_plan["feature_name"]}', 0)
+    # Add title - handle both feature_info as dict or string
+    if isinstance(feature_info, dict) and 'name' in feature_info:
+        title_text = f'Test Plan: {feature_info["name"]}'
+    elif isinstance(feature_info, str):
+        title_text = f'Test Plan: {feature_info}'
+    elif 'test_category' in test_plan:
+        title_text = f'Test Plan: {test_plan["test_category"]}'
+    else:
+        title_text = 'Test Plan'
+
+    title = doc.add_heading(title_text, 0)
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    # Add categories and test cases
-    for category in test_plan['test_categories']:
+    # Handle different JSON structure
+    if 'test_category' in test_plan and 'test_cases' in test_plan:
+        # New simplified structure with single category
         # Add category heading
-        cat_heading = doc.add_heading(f'Category: {category["name"]}', level=1)
-        doc.add_paragraph(category['description'])
+        cat_heading = doc.add_heading(f'Category: {test_plan["test_category"]}', level=1)
 
         # Add test cases
-        for test_case in category['test_cases']:
-            # Test case title
-            tc_heading = doc.add_heading(f'Test Case {test_case["id"]}: {test_case["title"]}', level=2)
+        for test_case in test_plan['test_cases']:
+            # Test case title using test_id
+            tc_heading = doc.add_heading(f'Test Case {test_case["test_id"]}', level=2)
 
-            # Description
+            # Description (which contains all the test details)
             doc.add_paragraph(f'Description: {test_case["description"]}')
-
-            # Implementation file
-            if 'implementation_file' in test_case:
-                doc.add_paragraph(f'Implementation file: {test_case["implementation_file"]}')
-
-            # Steps
-            steps_para = doc.add_paragraph('Steps:')
-            for step in test_case['steps']:
-                doc.add_paragraph(step, style='List Bullet')
-
-            # Expected Results
-            doc.add_paragraph(f'Expected Result: {test_case["expected_results"]}')
-
-            # Data Types
-            if 'data_types' in test_case and test_case['data_types']:
-                doc.add_paragraph(f'Data Types: {", ".join(test_case["data_types"])}')
 
             # Add spacing between test cases
             doc.add_paragraph()
@@ -213,8 +217,9 @@ def main() -> None:
     with open(args.json, 'w') as f:
         json.dump(test_plan, f, indent=2)
 
+    # import pdb; pdb.set_trace()  # Debugging breakpoint
     # Create Word document
-    create_test_plan_document(test_plan, args.output)
+    create_test_plan_document(test_plan, args.output, feature_info)
 
     if args.verbose:
         print(f"Test plan saved to: {args.output}")

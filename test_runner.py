@@ -75,11 +75,20 @@ class TestWorkflowRunner:
             print(f"Using existing test plan: {self.test_plan_file}")
             return True, self.test_plan_file
 
-        test_plan_file = self.output_dir / f"sample_test_plan.docx"
-        test_plan_json = self.output_dir / f"sample_test_plan.json"
-
         try:
             feature_info = self.load_feature_info()
+
+            # Extract name from feature_info and create filename
+            feature_name = "sample"  # default name
+            if feature_info and 'name' in feature_info:
+                feature_name = feature_info['name']
+                # Clean the name for use as filename (remove spaces, special chars)
+                feature_name = "".join(c for c in feature_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                feature_name = feature_name.replace(' ', '_').lower()
+
+            test_plan_file = self.output_dir / f"{feature_name}_test_plan.docx"
+            test_plan_json = self.output_dir / f"{feature_name}_test_plan.json"
+
             cmd = [
                 sys.executable,
                 "test_plangenerator.py",
@@ -102,7 +111,8 @@ class TestWorkflowRunner:
                 print(f"Error generating test plan: {result.stderr}")
                 return False, ""
 
-            return True, str(test_plan_file)
+            # Return the JSON file path for the test automation agent to use
+            return True, str(test_plan_json)
 
         except Exception as e:
             print(f"Error in test plan generation: {e}")
@@ -228,10 +238,10 @@ class TestWorkflowRunner:
                 test_plan_file = self.test_plan_file
                 print(f"Using existing test plan: {test_plan_file}")
             else:
-                # Look for existing test plan in output directory
+                # Look for existing test plan in output directory (prefer JSON for automation)
                 possible_plans = [
-                    self.output_dir / f"{self.feature_name}_test_plan.docx",
-                    self.output_dir / f"{self.feature_name}_test_plan.json"
+                    self.output_dir / f"{self.feature_name}_test_plan.json",
+                    self.output_dir / f"{self.feature_name}_test_plan.docx"
                 ]
                 for plan_file in possible_plans:
                     if plan_file.exists():
@@ -281,21 +291,22 @@ def main() -> None:
         description='Run the complete test workflow',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Run complete workflow (generate plan + run automation)
-  python test_runner.py --feature-input path/to/feature_input_json_file --output-dir path/to/output_dir
+            Examples:
+            # Run complete workflow (generate plan + run automation)
+            python test_runner.py --feature-input path/to/feature_input_json_file --output-dir path/to/output_dir
 
-  # Only generate test plan
-  python test_runner.py --feature-input path/to/feature_input_json_file --generate-plan-only --output-dir path/to/output_dir
+            # Only generate test plan
+            python test_runner.py --feature-input path/to/feature_input_json_file --generate-plan-only --output-dir path/to/output_dir
 
-  # Only run test automation (requires existing test plan)
-  python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir path/to/output_dir
+            # Only run test automation (requires existing test plan)
+            python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir path/to/output_dir
         """
     )
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
     parser.add_argument('--feature-input', help='Path to feature info JSON file')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
 
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
@@ -326,7 +337,8 @@ Examples:
         verbose=args.verbose,
         test_plan_file=args.test_plan,
         generate_plan=generate_plan,
-        run_automation=run_automation
+        run_automation=run_automation,
+        feature_info_file=args.feature_input
     )
 
     success = runner.run()

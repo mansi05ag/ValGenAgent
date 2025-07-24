@@ -83,16 +83,85 @@ class TestPlanParser:
         try:
             with open(self.file_path, 'r') as f:
                 test_plan = json.load(f)
+            
             test_cases = []
             implementation_files = set()
-            for category in test_plan.get('test_categories', []):
-                for test_case in category.get('test_cases', []):
-                    if test_case.get('implementation_file'):
-                        implementation_files.add(test_case['implementation_file'])
-                    test_cases.append(test_case)
+            
+            # Handle different JSON structures
+            if 'tests' in test_plan:
+                tests_section = test_plan['tests']
+                
+                # Check if tests is a list (array of test categories)
+                if isinstance(tests_section, list):
+                    for test_category in tests_section:
+                        implementation_file = test_category.get('implementation_file')
+                        if implementation_file:
+                            implementation_files.add(implementation_file)
+                        
+                        # Extract test cases and add implementation file info to each
+                        for test_case in test_category.get('test_cases', []):
+                            enhanced_test_case = test_case.copy()
+                            enhanced_test_case['implementation_file'] = implementation_file
+                            enhanced_test_case['test_category'] = test_category.get('test_category', '')
+                            
+                            # Map test_id to id for compatibility
+                            if 'test_id' in enhanced_test_case and 'id' not in enhanced_test_case:
+                                enhanced_test_case['id'] = enhanced_test_case['test_id']
+                            
+                            test_cases.append(enhanced_test_case)
+                
+                # Check if it's the new single test category format (tests as object)
+                elif isinstance(tests_section, dict) and 'test_category' in tests_section and 'implementation_file' in tests_section:
+                    # New format: single test category with implementation file
+                    implementation_file = tests_section.get('implementation_file')
+                    if implementation_file:
+                        implementation_files.add(implementation_file)
+                    
+                    # Extract test cases and add implementation file info to each
+                    for test_case in tests_section.get('test_cases', []):
+                        # Create a copy of the test case and add implementation file
+                        enhanced_test_case = test_case.copy()
+                        enhanced_test_case['implementation_file'] = implementation_file
+                        enhanced_test_case['test_category'] = tests_section.get('test_category', '')
+                        
+                        # Map test_id to id for compatibility
+                        if 'test_id' in enhanced_test_case and 'id' not in enhanced_test_case:
+                            enhanced_test_case['id'] = enhanced_test_case['test_id']
+                        
+                        test_cases.append(enhanced_test_case)
+            
+            # Handle the old format with test_categories directly
+            elif 'test_categories' in test_plan:
+                for test_category in test_plan['test_categories']:
+                    if test_category.get('implementation_file'):
+                        implementation_files.add(test_category['implementation_file'])
+                        for test_case in test_category.get('test_cases', []):
+                            test_cases.append(test_case)
+            
+            # Handle simple format with direct test_cases (like the original pytorch_collective_operations format)
+            elif 'test_cases' in test_plan:
+                for test_case in test_plan['test_cases']:
+                    # For this format, we'll create a default implementation file name
+                    test_category = test_plan.get('test_category', 'default_tests')
+                    impl_file = f"test_{test_category.lower().replace(' ', '_').replace('.', '_')}.py"
+                    
+                    enhanced_test_case = test_case.copy()
+                    enhanced_test_case['implementation_file'] = impl_file
+                    enhanced_test_case['test_category'] = test_category
+                    
+                    # Map test_id to id for compatibility
+                    if 'test_id' in enhanced_test_case and 'id' not in enhanced_test_case:
+                        enhanced_test_case['id'] = enhanced_test_case['test_id']
+                    
+                    test_cases.append(enhanced_test_case)
+                    implementation_files.add(impl_file)
+            
             return test_cases, list(implementation_files)
+            
         except Exception as e:
             print(f"Error reading JSON test plan: {e}")
+            import traceback
+            traceback.print_exc()
             return [], []
 
     def _extract_from_docx(self) -> Tuple[List[Dict[str, Any]], List[str]]:
@@ -624,20 +693,6 @@ def main():
     if not args.test_plan.endswith(('.json', '.docx')):
         print("ERROR: Test plan must be a JSON or DOCX file")
         sys.exit(1)
-
-    # Check for required environment variables - using Intel's internal API
-    # try:
-    #     test_key = get_openai_api_key()
-    #     if not test_key:
-    #         print("ERROR: Failed to obtain Intel API key")
-    #         print("Please ensure you have proper access to Intel's internal API")
-    #         sys.exit(1)
-    #     else:
-    #         print("Successfully obtained Intel API key")
-    # except Exception as e:
-    #     print(f"ERROR: Failed to get Intel API key: {str(e)}")
-    #     print("Please ensure you have proper access to Intel's internal API")
-    #     sys.exit(1)
 
     print("Multi-Agent Test Automation System")
     print("=" * 40)
