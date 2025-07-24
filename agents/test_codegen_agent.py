@@ -245,58 +245,6 @@ class MessageLogger:
     def get_log(self):
         return self.messages
 
-
-class CodeGenAgent(autogen.AssistantAgent):
-    def __init__(self, logger, api_key: Optional[str] = None):
-        super().__init__(
-            name="TestGenerationAgent",
-            llm_config=llm_config,
-            system_message=CODE_AGENT_SYSTEM_PROMPT
-        )
-        self.logger = logger
-        # Initialize knowledge base only if available
-        if VECTOR_DB_AVAILABLE and KnowledgeBase:
-            self.kb = KnowledgeBase(
-                api_key=api_key,
-                embed_base_url=EMBEDDING_BASE_URL,
-                llm_base_url=INFERENCE_BASE_URL,
-                model_name=MODEL_INFERENCE,
-            )
-        else:
-            self.kb = None
-            print("Warning: Knowledge base not initialized due to missing dependencies")
-
-    def build_knowledge_base(self, code_dirs, urls):
-        """Build the knowledge base
-
-        Args:
-            code_dirs (list): List of directories to index
-            urls (list): List of URLs to index
-
-        Returns:
-            bool: True if knowledge base was built successfully, False otherwise
-        """
-        if self.kb:
-            try:
-                self.kb.build_index(code_dirs, urls)
-                return True
-            except Exception as e:
-                print(f"Warning: Failed to build knowledge base: {e}")
-                return False
-        else:
-            print("Warning: Cannot build knowledge base - dependencies not available")
-            return False
-
-# Agent 2: Code Review
-class CodeReviewAgent(autogen.AssistantAgent):
-    def __init__(self, logger):
-        super().__init__(
-            name="TestCodeReviewAgent",
-            llm_config=llm_config,
-            system_message=REVIEW_AGENT_SYSTEM_PROMPT,
-        )
-        self.logger = logger
-
 # Agent 3: Smart Test Execution Agent
 class TestRunnerUserProxy(autogen.UserProxyAgent):
     def __init__(self, logger, output_dir="generated_tests"):
@@ -316,18 +264,6 @@ class TestRunnerUserProxy(autogen.UserProxyAgent):
         self.logger = logger
         self.output_dir = output_dir
 
-    def execute_code(self, code: str, context=None):
-        """
-        Receives the code from LLM conversation (with # filename directive),
-        executes using the Autogen executor (not subprocess),
-        and returns execution logs.
-        """
-        self.logger.info("Executing code:\n%s", code)
-        result = self.executor.execute(code, context=context)
-
-        # Print intermediate outputs
-        self.logger.info("Execution result:\n%s", result.output)
-        return result.output
 
 
 class ContextManagedGroupChat(autogen.GroupChat):
@@ -400,22 +336,35 @@ class MultiAgentTestOrchestrator:
         self.max_retries = max_retries
         self.max_context_messages = max_context_messages
         self.logger = MessageLogger()
+        self.kb = None # Knowledge base instance if available
 
         # check if source code dir exists
         if not os.path.exists(PYC_CODE):
             raise FileNotFoundError(f"The source code directory '{PYC_CODE}' does not exist.")
 
-        # Initialize the three agents
-        self.codegen_agent = CodeGenAgent(self.logger, api_key=os.getenv("OPENAI_API_KEY"))
-        kb_success = self.codegen_agent.build_knowledge_base(
-            code_dirs=[PYC_CODE],
-            urls=URLS_LIST
-        )
-        if not kb_success:
-            self.logger.log("Orchestrator", "Warning: Knowledge base initialization failed, proceeding without it")
+        # Initialize the agents
+        # Create the code generation agent
+        self.codegen_agent = autogen.AssistantAgent(
+            name="TestGenerationAgent",
+            llm_config=llm_config,
+            system_message=CODE_AGENT_SYSTEM_PROMPT)
 
-        self.review_agent = CodeReviewAgent(self.logger)
-        self.runner_agent = TestRunnerUserProxy(self.logger, output_dir)
+        # Create the review agent
+        self.review_agent = autogen.AssistantAgent(
+            name="TestCodeReviewAgent",
+            llm_config=llm_config,
+            system_message=REVIEW_AGENT_SYSTEM_PROMPT,)
+
+        # Create a runner agent to execute tests
+        self.runner_agent = autogen.UserProxyAgent(
+            name="TestExecutionProxy",
+            human_input_mode="NEVER",
+            max_consecutive_auto_reply=10,
+            code_execution_config={"executor": LocalCommandLineCodeExecutor(
+                                                timeout=120,
+                                                work_dir=output_dir)
+            },
+        )
 
         # Create a coordinator agent to manage the conversation
         self.coordinator = autogen.UserProxyAgent(
@@ -430,7 +379,7 @@ class MultiAgentTestOrchestrator:
         self.group_chat = ContextManagedGroupChat(
             agents=[self.coordinator, self.codegen_agent, self.review_agent, self.runner_agent],
             messages=[],
-            max_round=10,  # Allow enough rounds for iterations
+            max_round=50,  # Allow enough rounds for iterations
             max_context_messages=self.max_context_messages,
             logger=self.logger
         )
@@ -443,6 +392,23 @@ class MultiAgentTestOrchestrator:
         )
 
         os.makedirs(output_dir, exist_ok=True)
+
+        # Initialize knowledge base only if available
+        if VECTOR_DB_AVAILABLE and KnowledgeBase:
+            self.kb = KnowledgeBase(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                embed_base_url=EMBEDDING_BASE_URL,
+                llm_base_url=INFERENCE_BASE_URL,
+                model_name=MODEL_INFERENCE,
+            )
+
+        kb_success = self.build_knowledge_base(
+            code_dirs=[PYC_CODE],
+            urls=URLS_LIST
+        )
+        if not kb_success:
+            self.logger.log("Orchestrator", "Warning: Knowledge base initialization failed, proceeding without it")
+
 
     def orchestrate_test_generation(self, test_plan_path: str):
         """Main orchestration method using GroupChat for natural agent communication"""
@@ -501,9 +467,9 @@ class MultiAgentTestOrchestrator:
 
             # Get context from knowledge base if available
             context = ""
-            if self.codegen_agent.kb:
+            if self.kb:
                 try:
-                    context = self.codegen_agent.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
+                    context = self.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
                     if "[Error]" in context or not context:
                         self.logger.log("Orchestrator", f"WARNING: Failed to retrieve doc chunks for {impl_file}, proceeding without context")
                         context = ""
@@ -687,12 +653,6 @@ class MultiAgentTestOrchestrator:
         self.group_chat.messages = managed_messages
         self.logger.log("Orchestrator", f"Context managed: reduced to {len(self.group_chat.messages)} messages")
 
-    def _periodic_context_check(self):
-        """Perform periodic context check during conversation"""
-        if len(self.group_chat.messages) > self.max_context_messages * 0.8:  # Trigger at 80% capacity
-            self.logger.log("Orchestrator", "Performing periodic context management...")
-            self._manage_context_length()
-
     def _check_generated_test_files(self) -> bool:
         """Check if test files were actually generated and executed successfully"""
         try:
@@ -730,6 +690,27 @@ class MultiAgentTestOrchestrator:
 
         except Exception as e:
             self.logger.log("Orchestrator", f"Error checking generated test files: {str(e)}")
+            return False
+
+    def build_knowledge_base(self, code_dirs, urls):
+        """Build the knowledge base
+
+        Args:
+            code_dirs (list): List of directories to index
+            urls (list): List of URLs to index
+
+        Returns:
+            bool: True if knowledge base was built successfully, False otherwise
+        """
+        if self.kb:
+            try:
+                self.kb.build_index(code_dirs, urls)
+                return True
+            except Exception as e:
+                print(f"Warning: Failed to build knowledge base: {e}")
+                return False
+        else:
+            print("Warning: Cannot build knowledge base - dependencies not available")
             return False
 
 def run_test_automation(test_plan_path: str, output_dir: str = "generated_tests",
