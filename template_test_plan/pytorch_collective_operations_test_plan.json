@@ -1,0 +1,33 @@
+{
+  "test_plan": "PyTorch Collective Operations",
+  "tests": {
+    "test_category": "torch.distributed.all_reduce",
+    "implementation_file": "test_all_reduce.py",
+    "test_cases": [
+      {
+        "test_id": "AR001",
+        "description": "Functional test for all_reduce operation. Validate correct summation across all processes. Parameterize over data types (float32, float16, int64), tensor shapes (small, medium, large), and world sizes (2, 4, 8). Ensure synchronization across CPU, GPU, and HPU tensors."
+      },
+      {
+        "test_id": "AR002",
+        "description": "Edge case test for all_reduce with empty tensors. Verify operation handles empty tensors gracefully without errors. Parameterize over data types and world sizes. Ensure no memory overhead and proper synchronization."
+      },
+      {
+        "test_id": "AR003",
+        "description": "Edge case test for all_reduce with single-element tensors. Validate correct operation and synchronization. Parameterize over data types and world sizes. Check memory efficiency and bandwidth utilization."
+      },
+      {
+        "test_id": "AR004",
+        "description": "Performance test for all_reduce using torch_profiler. Measure latency and throughput across varying world sizes and tensor shapes. Ensure operations scale efficiently and utilize available bandwidth effectively."
+      },
+      {
+        "test_id": "AR005",
+        "description": "Zero size tensor test for all_reduce. Ensure operation handles zero-size tensors without errors. Validate synchronization and memory efficiency. Parameterize over data types and world sizes."
+      },
+      {
+        "test_id": "AR006",
+        "description": "Big tensor test for all_reduce. Validate operation correctness and performance with large tensors. Parameterize over data types and world sizes. Ensure efficient memory usage and bandwidth utilization."
+      }
+    ]
+  }
+}
