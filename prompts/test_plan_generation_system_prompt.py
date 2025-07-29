@@ -4,11 +4,12 @@ TEST_PLAN_SYSTEM_PROMPT=\
     1. Test category name
     2. Test cases with the following information:
         - Test case ID : to link test plan and actual test,
-        - Description : Information about what the test is doing. Any corener cases, that should be taken care during implementation. The expected result. Implementation details. Parameterize the test on data types, tensor sizes and world size. How to check the Performance of the test.
+        - Description : test case description,
     Note:
     1. Ensure that the test plan does not have any duplicate test cases. The test cases should be unique and not repeated across categories.
     2. Do not create separate tests for each datatypes, or tensor sizes. Instead, parameterize the test cases to cover all relevant data types and tensor sizes in a single test case.
     3. Each test case should have a unique ID that can be linked to the actual test implementation.
+    4. For now, create a test plan with only 1 test with 4 parameterization, as is mentioned in the input document.
 
 
     The test plan should be structured as a JSON object with the following format:
@@ -42,3 +43,4 @@ TEST_PLAN_SYSTEM_PROMPT=\
         }}
     }}
 """
+

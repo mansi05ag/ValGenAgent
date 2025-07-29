@@ -19,6 +19,7 @@ REVIEW_AGENT_SYSTEM_PROMPT=\
         - Proper resource cleanup and timeout handling
         - Testing best practices and conventions
 
+    - If the test generation agent is generating the same code multiple times, thoroughly check the code and understand if it's actually correct or not. Do not get struck in a loop.
     **MANDATORY REQUIREMENT**: The test file MUST include a main execution block that actually runs the tests. Look for code like:
     ```python
     if __name__ == "__main__":
