@@ -27,3 +27,8 @@ llama-index-readers-file>=0.4.11
 faiss-cpu>=1.7.4
 
 beautifulsoup4>=4.12.0
+
+# Additional document processing libraries for multi-format input support
+python-pptx>=0.6.21        # PowerPoint files
+PyPDF2>=3.0.1              # PDF files (alternative: pymupdf)
+xlrd>=2.0.1                 # Legacy Excel files (.xls)

@@ -16,7 +16,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.readers.web import BeautifulSoupWebReader
 from llama_index.llms.openai_like import OpenAILike
 
-from llama_index.readers.github import GithubRepositoryReader,GithubClient #pip install llama-index-readers-github
+# from llama_index.readers.github import GithubRepositoryReader,GithubClient #pip install llama-index-readers-github
 os.environ["GITHUB_TOKEN"] = "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"
 github_token = os.environ.get("GITHUB_TOKEN")
 
@@ -24,7 +24,7 @@ owner = "pytorch"
 repo = "pytorch"
 branch = "v2.7.1"
 target_directories = ["test/distributed"]
-github_client = GithubClient(github_token=github_token, verbose=True)
+# github_client = GithubClient(github_token=github_token, verbose=True)
 
 # reader = GithubRepositoryReader(
 #     github_client=github_client,

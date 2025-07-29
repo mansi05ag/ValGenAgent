@@ -45,13 +45,9 @@ def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dic
         if feature_info:
             feature_info_str = json.dumps(feature_info, indent=2)
             base_prompt += f"\n\nConsider the feature information while generating the test plan:\n {feature_info_str}"
-
-        print(f"Generating test plan for feature: ")
-        if feature_info:
-            print(f"Using feature info: {feature_info}")
+            print(f"Generating test plan for feature: {feature_info['name']}")
 
         try:
-            print(f"Base prompt for test plan generation:\n{base_prompt}\n")
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[

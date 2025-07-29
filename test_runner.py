@@ -3,7 +3,7 @@
 Enhanced Test Workflow Runner
 
 This script coordinates the entire test workflow:
-1. Collect feature information from command line or JSON file
+1. Accept various input formats (JSON, DOCX, PPTX, XLSX, PDF, TXT) and convert to JSON
 2. Generate test plan document using test_plangenerator.py
 3. Run test_automation_agent.py to create test code
 4. Execute the generated tests
@@ -26,6 +26,9 @@ from dotenv import load_dotenv
 
 # Import the new OpenAI API key utility
 from utils.openai_api_key_utils import get_openai_api_key
+
+# Import the new input converter
+from utils.input_converter import InputConverter
 
 # Import the modules directly
 from test_plangenerator import generate_test_plan_files
@@ -60,22 +63,46 @@ class TestWorkflowRunner:
         # Initialize feature_name (will be set when loading feature info)
         self.feature_name = "sample"
 
+        # Initialize input converter
+        self.input_converter = InputConverter(api_key=self.api_key)
+
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def load_feature_info(self) -> Dict:
-        """Load feature information from file if provided."""
-        # if self.feature_info:
-        #     return self.feature_info
+        """Load feature information from file if provided, converting from various formats to JSON."""
+        if not self.feature_info_file or not os.path.exists(self.feature_info_file):
+            return {}
 
-        if self.feature_info_file and os.path.exists(self.feature_info_file):
-            try:
-                with open(self.feature_info_file, 'r') as f:
-                    return json.load(f)
-            except json.JSONDecodeError as e:
-                print(f"Error loading feature info file: {e}")
+        try:
+            # Check if input converter supports this format
+            if not self.input_converter.is_supported_format(self.feature_info_file):
+                file_format = self.input_converter.detect_file_format(self.feature_info_file)
+                supported_formats = list(self.input_converter.get_supported_formats().keys())
+                print(f"Error: Unsupported input file format '{file_format}'")
+                print(f"Supported formats: {', '.join(supported_formats)}")
                 return {}
-        return {}
+
+            # Convert input file to JSON format
+            success, json_file_path, json_content = self.input_converter.convert_to_json(self.feature_info_file)
+
+            if not success:
+                print(f"Error: Failed to convert input file '{self.feature_info_file}' to JSON format")
+                return {}
+
+            # The InputConverter already provides detailed output, so we don't need verbose logging here
+            # Just confirm the conversion was successful if it's a different file
+            if json_file_path != self.feature_info_file:
+                print(f"Using converted JSON file for pipeline processing...")
+
+            return json_content
+
+        except Exception as e:
+            print(f"Error loading and converting feature info file: {e}")
+            import traceback
+            if self.verbose:
+                traceback.print_exc()
+            return {}
 
     def generate_test_plan(self) -> Tuple[bool, str]:
         """Generate test plan document."""
@@ -289,25 +316,43 @@ class TestWorkflowRunner:
 def main() -> None:
 
     parser = argparse.ArgumentParser(
-        description='Run the complete test workflow',
+        description='Run the complete test workflow with multi-format input support',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
             Examples:
-            # Run complete workflow (generate plan + run automation)
-            python test_runner.py --feature-input path/to/feature_input_json_file --output-dir path/to/output_dir
+            # Run complete workflow (generate plan + run automation) with JSON input
+            python test_runner.py --feature-input path/to/feature_input.json --output-dir path/to/output_dir
 
-            # Only generate test plan
-            python test_runner.py --feature-input path/to/feature_input_json_file --generate-plan-only --output-dir path/to/output_dir
+            # Run with PowerPoint input
+            python test_runner.py --feature-input feature_requirements.pptx --output-dir test_results
+
+            # Run with Word document input
+            python test_runner.py --feature-input feature_spec.docx --output-dir test_results
+
+            # Run with Excel input
+            python test_runner.py --feature-input requirements.xlsx --output-dir test_results
+
+            # Only generate test plan from PDF
+            python test_runner.py --feature-input requirements.pdf --generate-plan-only --output-dir test_results
 
             # Only run test automation (requires existing test plan)
-            python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir path/to/output_dir
+            python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir test_results
+
+            Supported input formats:
+            • JSON (.json) - Direct format (current)
+            • PowerPoint (.pptx) - Extracts text from slides
+            • Word Documents (.docx) - Extracts text and tables
+            • Excel Spreadsheets (.xlsx, .xls) - Extracts data from all sheets
+            • PDF Documents (.pdf) - Extracts text content
+            • Text Files (.txt) - Plain text input
         """
     )
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
-    parser.add_argument('--feature-input', help='Path to feature info JSON file')
+    parser.add_argument('--feature-input', help='Path to feature info file (supports multiple formats: JSON, DOCX, PPTX, XLSX, PDF, TXT)')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
+    parser.add_argument('--list-formats', action='store_true', help='List all supported input formats and exit')
 
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
@@ -317,6 +362,17 @@ def main() -> None:
                            help='Only run test automation, skip test plan generation')
 
     args = parser.parse_args()
+
+    # Handle list formats option
+    if args.list_formats:
+        converter = InputConverter()
+        print("Supported input file formats:")
+        print("=" * 40)
+        for ext, desc in converter.get_supported_formats().items():
+            print(f"  {ext:<8} : {desc}")
+        print("\nNote: The system will automatically detect the format and convert")
+        print("      all inputs to JSON format before processing.")
+        return
 
     # Determine which steps to run
     generate_plan = True
