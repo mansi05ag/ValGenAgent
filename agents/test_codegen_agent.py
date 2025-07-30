@@ -257,7 +257,7 @@ class TestRunnerUserProxy(autogen.UserProxyAgent):
         super().__init__(
             name="TestExecutionProxy",
             human_input_mode="NEVER",
-            max_consecutive_auto_reply=10,
+            max_consecutive_auto_reply=50,
             code_execution_config={"executor": self.executor},
         )
 
@@ -359,7 +359,7 @@ class MultiAgentTestOrchestrator:
         self.runner_agent = autogen.UserProxyAgent(
             name="TestExecutionProxy",
             human_input_mode="NEVER",
-            max_consecutive_auto_reply=10,
+            max_consecutive_auto_reply=50,
             code_execution_config={"executor": LocalCommandLineCodeExecutor(
                                                 timeout=120,
                                                 work_dir=output_dir)
@@ -522,13 +522,12 @@ class MultiAgentTestOrchestrator:
         """Format test cases for group chat message"""
         formatted = []
         for i, tc in enumerate(test_cases, 1):
-            formatted.append(f"Test Case {i}: {tc.get('title', 'N/A')}")
+            formatted.append(f"Test Case {i}")
             formatted.append(f"Description: {tc.get('description', 'N/A')}")
             if tc.get('steps'):
                 formatted.append(f"Steps: {'; '.join(tc['steps'])}")
             if tc.get('data_types'):
                 formatted.append(f"Data Types: {', '.join(tc['data_types'])}")
-            formatted.append(f"Expected Result: {tc.get('expected_results', 'N/A')}")
             formatted.append("")  # Empty line for separation
         return '\n'.join(formatted)
 
