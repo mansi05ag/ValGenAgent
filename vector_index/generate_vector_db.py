@@ -193,20 +193,6 @@ class KnowledgeBase:
             traceback.print_exc()
             return f"[Error]: Retrieval failed: {str(e)}"
 
-    def query(self, query_str):
-        """Query the knowledge base"""
-        if not self.index:
-            raise ValueError("Index not built. Call build_index() first.")
-
-        try:
-            response = self.index.as_query_engine(llm=self.llm)
-            return response
-        except Exception as e:
-            print(f"[Error]: Query failed: {e}")
-            import traceback
-            traceback.print_exc()
-            return f"[Error]: Query failed: {str(e)}"
-
     def build_index(self, input_dirs=None, public_urls_file=None):
         """Build the knowledge base index from code directories and URLs"""
         try:
