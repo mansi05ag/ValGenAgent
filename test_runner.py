@@ -154,7 +154,7 @@ class TestWorkflowRunner:
             traceback.print_exc()
             return False, ""
 
-    def run_test_automation(self, test_plan_file: str) -> bool:
+    def run_test_automation(self, test_plan_file: str, execute_tests: bool = True) -> bool:
         """Run test automation agent to generate and execute tests."""
         print("Running test automation...")
         try:
@@ -166,7 +166,8 @@ class TestWorkflowRunner:
                 output_dir=output_dir,
                 max_retries=2,  # default value
                 max_context=25,  # default value
-                verbose=self.verbose
+                verbose=self.verbose,
+                execute_tests=execute_tests
             )
 
             if not success:
@@ -230,7 +231,7 @@ class TestWorkflowRunner:
         except Exception as e:
             print(f"Error saving results to Excel: {e}")
 
-    def print_workflow_summary(self):
+    def print_workflow_summary(self, execute_tests: bool = True):
         """Print a summary of the workflow configuration."""
         print("=" * 60)
         print(f"Test Workflow Configuration")
@@ -238,16 +239,17 @@ class TestWorkflowRunner:
         print(f"Output Directory: {self.output_dir}")
         print(f"Generate Test Plan: {'Yes' if self.generate_plan else 'No'}")
         print(f"Run Test Automation: {'Yes' if self.run_automation else 'No'}")
+        print(f"Execute Tests: {'Yes' if execute_tests else 'No'}")
         if self.test_plan_file:
             print(f"Test Plan File: {self.test_plan_file}")
         if self.feature_info_file:
             print(f"Feature Info File: {self.feature_info_file}")
         print("=" * 60)
 
-    def run(self) -> bool:
+    def run(self, execute_tests: bool = True) -> bool:
         """Run the complete test workflow."""
         # Print workflow configuration
-        self.print_workflow_summary()
+        self.print_workflow_summary(execute_tests)
 
         start_time = time.time()
         test_plan_file = None
@@ -285,33 +287,35 @@ class TestWorkflowRunner:
         # Step 2: Run test automation (if enabled)
         if self.run_automation:
             print("Step 2: Running test automation...")
-            if not self.run_test_automation(test_plan_file):
+            if not self.run_test_automation(test_plan_file, execute_tests):
                 print("Failed to run test automation.")
                 return False
             print("Test automation completed successfully.")
 
-            # Step 3: Collect and save results (only if automation ran)
-            print("Step 3: Collecting and saving test results...")
-            results = self.collect_test_results()
-            self.save_results_to_excel(results)
+            # Step 3: Collect and save results (only if automation ran and tests are executed)
+            if execute_tests:
+                print("Step 3: Collecting and saving test results...")
+                results = self.collect_test_results()
+                self.save_results_to_excel(results)
 
-            # Print summary
-            execution_time = time.time() - start_time
-            passed = sum(1 for r in results if r.status == 'Passed')
-            failed = sum(1 for r in results if r.status == 'Failed')
+                # Print summary
+                execution_time = time.time() - start_time
+                passed = sum(1 for r in results if r.status == 'Passed')
+                failed = sum(1 for r in results if r.status == 'Failed')
 
-            print("\nTest Execution Summary:")
-            print(f"Total Tests: {len(results)}")
-            print(f"Passed: {passed}")
-            print(f"Failed: {failed}")
-            print(f"Total Execution Time: {execution_time:.2f} seconds")
+                print("\nTest Execution Summary:")
+                print(f"Total Tests: {len(results)}")
+                print(f"Passed: {passed}")
+                print(f"Failed: {failed}")
+                print(f"Total Execution Time: {execution_time:.2f} seconds")
 
-            return failed == 0
-        else:
-            print("Test automation step skipped.")
-            execution_time = time.time() - start_time
-            print(f"Total Execution Time: {execution_time:.2f} seconds")
-            return True
+                return failed == 0
+            else:
+                print("Test execution step skipped.")
+
+        execution_time = time.time() - start_time
+        print(f"Total Execution Time: {execution_time:.2f} seconds")
+        return True
 
 def main() -> None:
 
@@ -333,18 +337,16 @@ def main() -> None:
             python test_runner.py --feature-input requirements.xlsx --output-dir test_results
 
             # Only generate test plan from PDF
-            python test_runner.py --feature-input requirements.pdf --generate-plan-only --output-dir test_results
+            python test_runner.py --generate-plan-only --feature-input requirements.pdf --output-dir test_results
 
             # Only run test automation (requires existing test plan)
             python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir test_results
 
-            Supported input formats:
-            • JSON (.json) - Direct format (current)
-            • PowerPoint (.pptx) - Extracts text from slides
-            • Word Documents (.docx) - Extracts text and tables
-            • Excel Spreadsheets (.xlsx, .xls) - Extracts data from all sheets
-            • PDF Documents (.pdf) - Extracts text content
-            • Text Files (.txt) - Plain text input
+            # Generate tests from feature input without executing them
+            python test_runner.py --feature-input path/to/feature_input.json --output-dir path/to/output_dir --execute-tests=false
+
+            # Generate tests from existing test plan without executing them
+            python test_runner.py --test-plan path/to/plan.json --output-dir path/to/output_dir --execute-tests=false
         """
     )
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
@@ -360,6 +362,10 @@ def main() -> None:
                            help='Only generate test plan, skip test automation')
     step_group.add_argument('--test-automation-only', action='store_true',
                            help='Only run test automation, skip test plan generation')
+    
+    # Test execution control
+    parser.add_argument('--execute-tests', type=lambda x: x.lower() in ('true', '1', 'yes'), 
+                       default=True, help='Execute generated tests (default: True). Set to False to only generate tests without execution.')
 
     args = parser.parse_args()
 
@@ -387,7 +393,12 @@ def main() -> None:
         run_automation = True
         print("Mode: Test automation only")
     else:
-        print("Mode: Complete workflow (generate plan + test automation)")
+        # Default mode: generate plan (if needed) + test automation
+        # The execute_tests flag will control whether tests are actually executed
+        if args.execute_tests:
+            print("Mode: Complete workflow (generate plan + test automation + execution)")
+        else:
+            print("Mode: Generate tests only (skip execution)")
 
     runner = TestWorkflowRunner(
         output_dir=args.output_dir,
@@ -398,7 +409,7 @@ def main() -> None:
         feature_info_file=args.feature_input
     )
 
-    success = runner.run()
+    success = runner.run(execute_tests=args.execute_tests)
     sys.exit(0 if success else 1)
 
 if __name__ == '__main__':
