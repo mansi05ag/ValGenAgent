@@ -15,46 +15,7 @@ from llama_index.core.node_parser import SimpleNodeParser
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.readers.web import BeautifulSoupWebReader
 from llama_index.llms.openai_like import OpenAILike
-
-# from llama_index.readers.github import GithubRepositoryReader,GithubClient #pip install llama-index-readers-github
-os.environ["GITHUB_TOKEN"] = "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"
-github_token = os.environ.get("GITHUB_TOKEN")
-
-owner = "pytorch"
-repo = "pytorch"
-branch = "v2.7.1"
-target_directories = ["test/distributed"]
-# github_client = GithubClient(github_token=github_token, verbose=True)
-
-# reader = GithubRepositoryReader(
-#     github_client=github_client,
-#     owner=owner,
-#     repo=repo,
-#     use_parser=True,
-#     verbose=False,
-#     # Use filter_directories to specify which directories to include
-#     filter_directories=(
-#         target_directories,
-#         GithubRepositoryReader.FilterType.INCLUDE,
-#     ),
-#     # ignore_directories=["docs", "examples"],
-#     # And filter by file extensions
-#     # filter_file_extensions=(
-#     #     [
-#     #         ".png",
-#     #     ],
-#     #     GithubRepositoryReader.FilterType.EXCLUDE,
-#     # ),
-#     # timeout=httpx.Timeout(30.0)
-# )
-
-# documents = reader.load_data(branch=branch)
-
-# print(f"Ingested {len(documents)} documents from the specified directory(ies).")
-
-# # index = VectorStoreIndex.from_documents(documents)
-
-# import pdb; pdb.set_trace()
+from llama_index.core.node_parser import CodeSplitter, HierarchicalNodeParser
 
 class KnowledgeBase:
     """Knowledge base using LlamaIndex for document retrieval and querying"""
@@ -66,7 +27,6 @@ class KnowledgeBase:
         llm_base_url,
         model_name="gpt-4o",
         knowledge_index_dir="./index_db",
-        tracker_file="document_tracker.pkl",
         embedding_model="text-embedding-ada-002",
         embedding_dim=1536
     ):
@@ -75,7 +35,6 @@ class KnowledgeBase:
         self.llm_base_url = llm_base_url
         self.model_name = model_name
         self.knowledge_index_dir = knowledge_index_dir
-        self.tracker_file = tracker_file
         self.embedding_model = embedding_model
         self.embedding_dim = embedding_dim
 
@@ -99,45 +58,19 @@ class KnowledgeBase:
         self.query_engine = None
         self.retriever = None # Gets the most relevant document chunks without LLM processing
 
-    def build_index(self, code_dirs, urls):
-        """Build the index from code directories and URLs - always rebuild to avoid corruption"""
+    def load_documents(self, code_dirs: str, urls:list[str])->list[Document]:
+        """ load documents from code directories and URLs """
         try:
-            # Check if index already exists
-            if os.path.exists(self.knowledge_index_dir):
-                try:
-                    print("[Info]: Loading existing index...")
-                    storage_context = StorageContext.from_defaults(persist_dir=self.knowledge_index_dir)
-                    self.index = load_index_from_storage(
-                        storage_context,
-                        embed_model=self.embed_model
-                    )
-
-                    # Create query engine
-                    print("[Info]: Creating query engine from existing index...")
-                    self.query_engine = self.index.as_query_engine(llm=self.llm)
-                    print("[Info]: Successfully loaded existing index")
-                    return
-
-                except Exception as e:
-                    print(f"[Warning]: Failed to load existing index: {e}")
-                    print("[Info]: Will rebuild index from scratch...")
-                    # Remove corrupted index
-                    import shutil
-                    shutil.rmtree(self.knowledge_index_dir)
-
-            print("[Info]: Building index from scratch...")
-
-            # Load all documents
             all_documents = []
 
-            # Load code files
-            for code_dir in code_dirs:
-                if os.path.exists(code_dir):
-                    print(f"[Info]: Loading documents from {code_dir}")
-                    reader = SimpleDirectoryReader(code_dir, recursive=True)
-                    docs = reader.load_data()
-                    all_documents.extend(docs)
-                    print(f"[Info]: Loaded {len(docs)} documents from {code_dir}")
+            if not os.path.exists(code_dirs):
+                raise FileNotFoundError(f"inpur directory '{code_dirs}' does not exist.")
+
+            print(f"[Info]: Loading documents from {code_dirs}")
+            reader = SimpleDirectoryReader(code_dirs, recursive=True)
+            docs = reader.load_data(num_workers=8)
+            all_documents.extend(docs)
+            print(f"[Info]: Loaded {len(docs)} documents from {code_dirs}")
 
             # Load URLs
             if urls:
@@ -155,35 +88,79 @@ class KnowledgeBase:
                 return
 
             print(f"[Info]: Total documents loaded: {len(all_documents)}")
+            return all_documents
 
-            # Parse documents to nodes
-            print("[Info]: Parsing documents into nodes...")
-            parser = SimpleNodeParser()
-            nodes = parser.get_nodes_from_documents(all_documents)
-            print(f"[Info]: Created {len(nodes)} nodes")
+        except Exception as e:
+            print(f"[Error]: Failed to load documents: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
-            if len(nodes) == 0:
-                print("[Warning]: No nodes created from documents")
-                return
+    def parse_documents_by_type(self, docs: list[Document]):
+        # Documents objects are converted into nodes (or a small meaningful chunk) based on their type.
+        # Nodes are what's actually stored, embedded, and retrieved.
+        # Supported languages: https://github.com/Goldziher/tree-sitter-language-pack?tab=readme-ov-file#available-languages
 
-            # Create index using simple storage (no FAISS)
+        doc_parser = HierarchicalNodeParser.from_defaults(chunk_sizes=[1024, 512])  # multiple granularities
+
+        nodes = []
+        for doc in docs:
+            if doc.metadata.get("file_name", "").endswith(".py"):
+                nodes += CodeSplitter(language="python", chunk_lines=30, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+            elif doc.metadata.get("file_name", "").endswith(".cpp"):
+                nodes += CodeSplitter(language="cpp", chunk_lines=30, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+            elif doc.metadata.get("file_name", "").endswith(".c"):
+                nodes += CodeSplitter(language="c", chunk_lines=30, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+            elif doc.metadata.get("file_name", "").endswith(".asm"):
+                nodes += CodeSplitter(language="asm", chunk_lines=15, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+            else:
+                # Fallback to hierarchical parser for other types
+                # This will handle text, markdown, html, etc.
+                # It will also handle code files that are not specifically parsed above
+                # by splitting them into smaller nodes based on content length.
+                nodes += doc_parser.get_nodes_from_documents([doc])
+
+        print(f"[Info]: Parsed {len(nodes)} nodes from {len(docs)} documents")
+        return nodes
+
+    def create_vector_index_from_nodes(self, nodes, persist_dir=None):
+        try:
+            # Check if index already exists
+            if os.path.exists(persist_dir):
+                try:
+                    print("[Info]: Loading existing vector index...")
+                    storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
+                    self.index = load_index_from_storage(
+                        storage_context,
+                        embed_model=self.embed_model
+                    )
+                    return
+
+                except Exception as e:
+                    print(f"[Warning]: Failed to load existing vector index: {e}")
+                    print("[Info]: Building vector index freshly ...")
+                    import shutil
+                    shutil.rmtree(persist_dir, ignore_errors=True)
+                    self.index = VectorStoreIndex(
+                        nodes,
+                        embed_model=self.embed_model,
+                        show_progress=True
+                    )
+                    print(f"[Info]: Saving freshly created vector index to {persist_dir}")
+                    self.index.storage_context.persist(persist_dir=persist_dir)
+                    return
+
+            # Create index using simple storage
             print("[Info]: Building vector index...")
             self.index = VectorStoreIndex(
                 nodes,
                 embed_model=self.embed_model,
                 show_progress=True
             )
-
-            # Save the index
-            print(f"[Info]: Saving index to {self.knowledge_index_dir}")
-            self.index.storage_context.persist(persist_dir=self.knowledge_index_dir)
-
-            # Create query engine
-            print("[Info]: Creating query engine...")
-            self.query_engine = self.index.as_query_engine(llm=self.llm)
-
+            print(f"[Info]: Saving vector index to {persist_dir}")
+            self.index.storage_context.persist(persist_dir=persist_dir)
         except Exception as e:
-            print(f"[Error]: Failed to build index: {e}")
+            print(f"[Error]: Failed to build/load vector index: {e}")
             import traceback
             traceback.print_exc()
             raise
@@ -197,26 +174,14 @@ class KnowledgeBase:
             response = self.query_engine.query(query_str)
             return response.response.strip()
         except Exception as e:
-            print(f"[Error]: Query failed: {e}")
             import traceback
             traceback.print_exc()
             return f"[Error]: Query failed: {str(e)}"
 
-    def force_rebuild_index(self, code_dirs, urls):
-        """Force rebuild the index from scratch"""
-        print("[Info]: Force rebuilding index...")
-        if os.path.exists(self.knowledge_index_dir):
-            import shutil
-            shutil.rmtree(self.knowledge_index_dir)
-
-        self.index = None
-        self.query_engine = None
-        self.build_index(code_dirs, urls)
-
-    def retrive_document_chunks(self, query_str, top_k=2):
+    def retrive_document_chunks(self, query_str, top_k=5):
         """Retrieve documents based on a query"""
         if not self.query_engine:
-            raise ValueError("Index not built. Call build_index() first.")
+            raise ValueError("Index not built. Build vector index first.")
 
         try:
             retriever = self.index.as_retriever(similarity_top_k=top_k)
@@ -227,3 +192,72 @@ class KnowledgeBase:
             import traceback
             traceback.print_exc()
             return f"[Error]: Retrieval failed: {str(e)}"
+
+    def query(self, query_str):
+        """Query the knowledge base"""
+        if not self.index:
+            raise ValueError("Index not built. Call build_index() first.")
+
+        try:
+            response = self.index.as_query_engine(llm=self.llm)
+            return response
+        except Exception as e:
+            print(f"[Error]: Query failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"[Error]: Query failed: {str(e)}"
+
+    def build_index(self, input_dirs=None, public_urls_file=None):
+        """Build the knowledge base index from code directories and URLs"""
+        try:
+            # Check if index already exists
+            if os.path.exists(self.knowledge_index_dir):
+                print("[Info]: Loading existing index...")
+                storage_context = StorageContext.from_defaults(persist_dir=self.knowledge_index_dir)
+                self.index = load_index_from_storage(
+                    storage_context,
+                    embed_model=self.embed_model
+                )
+
+                # Create query engine
+                print("[Info]: Creating query engine from existing index...")
+                self.query_engine = self.index.as_query_engine(llm=self.llm)
+                print("[Info]: Successfully loaded existing index")
+                return
+        except Exception as e:
+            print(f"[Error]: Failed to load existing vector index: {e}")
+            print(f"[Info]: Deleting existing index and rebuilding...")
+            import shutil
+            shutil.rmtree(self.knowledge_index_dir)
+
+        print("[Info]: Building new vector index...")
+
+        if not input_dirs and not public_urls_file:
+            raise ValueError("No input directories or URLs provided to build index.")
+
+        # check if public_urls_file exists
+        if public_urls_file and not os.path.exists(public_urls_file):
+            raise FileNotFoundError(f"Public URLs file not found: {public_urls_file}")
+
+        urls = open(public_urls_file, "r", encoding="utf-8").read()
+        urls = [url.strip() for url in urls.split("\n") if url.strip()]
+        # ignore if line start with comment
+        for i, url in enumerate(urls):
+            if url.startswith("#"):
+                urls.pop(i)
+
+        # Load documents
+        docs = self.load_documents(input_dirs, urls)
+        if not docs:
+            print("[Warning]: No documents loaded. Cannot build index.")
+            return
+
+        # Parse documents into nodes
+        nodes = self.parse_documents_by_type(docs=docs)
+
+        # Create vector index from nodes
+        self.create_vector_index_from_nodes(nodes, persist_dir=self.knowledge_index_dir)
+
+        # Create query engine
+        print("[Info]: Creating query engine...")
+        self.query_engine = self.index.as_query_engine(llm=self.llm)

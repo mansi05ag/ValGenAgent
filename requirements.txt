@@ -1,5 +1,4 @@
 google-generativeai>=0.3.0
-python-docx
 pytest>=7.0.0
 gitpython
 jira
@@ -7,28 +6,16 @@ python-dotenv>=1.0.0
 numpy>=1.24.0
 torch>=2.0.0
 pytest-timeout
-pandas
 requests>=2.31.0
 openpyxl>=3.1.2
 pyautogen>=0.2.0
 autogen>=0.9.6
 openai>=1.0.0
 
-# LlamaIndex core and extensions
-llama-index-core>=0.10.0
-llama-index-embeddings-openai>=0.1.0
-llama-index-vector-stores-faiss>=0.1.0
-llama-index-llms-openai>=0.1.0
-llama-index-llms-openai-like>=0.1.0
-llama-index-readers-web>=0.1.0
-llama-index-readers-file>=0.4.11
-
-# Vector database
-faiss-cpu>=1.7.4
-
+llama-index
 beautifulsoup4>=4.12.0
 
 # Additional document processing libraries for multi-format input support
 python-pptx>=0.6.21        # PowerPoint files
 PyPDF2>=3.0.1              # PDF files (alternative: pymupdf)
-xlrd>=2.0.1                 # Legacy Excel files (.xls)
+xlrd>=2.0.1                # Legacy Excel files (.xls)

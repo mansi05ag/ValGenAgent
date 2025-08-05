@@ -15,8 +15,8 @@ from utils.openai_endpoints import (
     AUTH_BASE_URL,
 )
 
-CODE_DIR="code"
-URLS = ["https://docs.pytorch.org/docs/stable/distributed.html"]
+CODE_DIR="../input_dirs"
+PUCLIC_URLS_FILE= "../input_dirs/public_urls.txt"
 
 if __name__ == "__main__":
     load_dotenv()
@@ -38,9 +38,10 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"The code directory '{CODE_DIR}' does not exist.")
 
     kb.build_index(
-        code_dirs=[CODE_DIR],
-        urls=URLS
+        input_dirs=CODE_DIR,
+        public_urls_file=PUCLIC_URLS_FILE,
     )
+    print("[Info]: vector undex built successfully.")
 
     query_str = "Write test for Collective API all_reduce based on the code context for hpu device"
     print(f"Querying for: {query_str}")
