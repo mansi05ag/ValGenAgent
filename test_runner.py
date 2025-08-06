@@ -3,11 +3,16 @@
 Enhanced Test Workflow Runner
 
 This script coordinates the entire test workflow:
-1. Accept various input formats (JSON, DOCX, PPTX, XLSX, PDF, TXT) and convert to JSON
-2. Generate test plan document using test_plangenerator.py
-3. Run test_automation_agent.py to create test code
+1. Accept input directory containing docs/ and code/ subdirectories
+2. Generate test plan document using documentation from docs/ directory
+3. Run test_automation_agent.py to create test code using code/ directory for reference
 4. Execute the generated tests
 5. Record results in an Excel file
+
+Input Directory Structure:
+input_directory/
+├── docs/     (documentation files: .docx, .pptx, .xlsx, .pdf, .txt, .md, .html, etc.)
+└── code/     (source code files for reference during test generation)
 """
 
 import os
@@ -27,8 +32,8 @@ from dotenv import load_dotenv
 # Import the new OpenAI API key utility
 from utils.openai_api_key_utils import get_openai_api_key
 
-# Import the new input converter
-from utils.input_converter import InputConverter
+# Import the new document processor
+from utils.document_processor import DocumentProcessor
 
 # Import the modules directly
 from test_plangenerator import generate_test_plan_files
@@ -50,55 +55,51 @@ class TestWorkflowRunner:
 
     def __init__(self, output_dir: str, verbose: bool = False,
                  test_plan_file: Optional[str] = None,
-                 feature_info_file: Optional[str] = None, api_key = None,
+                 input_dir: Optional[str] = None, api_key = None,
                  generate_plan: bool = True, run_automation: bool = True):
         self.output_dir = Path(output_dir)
         self.verbose = verbose
         self.test_plan_file = test_plan_file
         self.api_key = api_key or get_openai_api_key()
-        self.feature_info_file = feature_info_file
+        self.input_dir = input_dir
         self.generate_plan = generate_plan
         self.run_automation = run_automation
 
         # Initialize feature_name (will be set when loading feature info)
         self.feature_name = "sample"
 
-        # Initialize input converter
-        self.input_converter = InputConverter(api_key=self.api_key)
+        # Initialize document processor
+        self.doc_processor = DocumentProcessor(
+            api_key=self.api_key,
+            verbose=self.verbose
+        )
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def load_feature_info(self) -> Dict:
-        """Load feature information from file if provided, converting from various formats to JSON."""
-        if not self.feature_info_file or not os.path.exists(self.feature_info_file):
+        """Load feature information from input directory, creating a structured feature input JSON."""
+        if not self.input_dir or not os.path.exists(self.input_dir):
             return {}
 
         try:
-            # Check if input converter supports this format
-            if not self.input_converter.is_supported_format(self.feature_info_file):
-                file_format = self.input_converter.detect_file_format(self.feature_info_file)
-                supported_formats = list(self.input_converter.get_supported_formats().keys())
-                print(f"Error: Unsupported input file format '{file_format}'")
-                print(f"Supported formats: {', '.join(supported_formats)}")
-                return {}
+            print(f"Processing input directory: {self.input_dir}")
 
-            # Convert input file to JSON format
-            success, json_file_path, json_content = self.input_converter.convert_to_json(self.feature_info_file)
+            # Use document processor to create feature info
+            success, json_file_path, feature_info = self.doc_processor.process_input_directory(
+                input_dir=self.input_dir,
+                output_dir=str(self.output_dir)
+            )
 
             if not success:
-                print(f"Error: Failed to convert input file '{self.feature_info_file}' to JSON format")
+                print("Failed to process input directory")
                 return {}
 
-            # The InputConverter already provides detailed output, so we don't need verbose logging here
-            # Just confirm the conversion was successful if it's a different file
-            if json_file_path != self.feature_info_file:
-                print(f"Using converted JSON file for pipeline processing...")
-
-            return json_content
+            print(f"Feature input JSON saved to: {json_file_path}")
+            return feature_info
 
         except Exception as e:
-            print(f"Error loading and converting feature info file: {e}")
+            print(f"Error loading feature info from input directory: {e}")
             import traceback
             if self.verbose:
                 traceback.print_exc()
@@ -242,8 +243,10 @@ class TestWorkflowRunner:
         print(f"Execute Tests: {'Yes' if execute_tests else 'No'}")
         if self.test_plan_file:
             print(f"Test Plan File: {self.test_plan_file}")
-        if self.feature_info_file:
-            print(f"Feature Info File: {self.feature_info_file}")
+        if self.input_dir:
+            print(f"Input Directory: {self.input_dir}")
+            print(f"  - Docs Directory: {Path(self.input_dir) / 'docs'}")
+            print(f"  - Code Directory: {Path(self.input_dir) / 'code'}")
         print("=" * 60)
 
     def run(self, execute_tests: bool = True) -> bool:
@@ -320,30 +323,26 @@ class TestWorkflowRunner:
 def main() -> None:
 
     parser = argparse.ArgumentParser(
-        description='Run the complete test workflow with multi-format input support',
+        description='Run the complete test workflow using input directory with docs/ and code/ subdirectories',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
             Examples:
-            # Run complete workflow (generate plan + run automation) with JSON input
-            python test_runner.py --feature-input path/to/feature_input.json --output-dir path/to/output_dir
+            # Run complete workflow (generate plan + run automation) with input directory
+            python test_runner.py --input-dir path/to/input_directory --output-dir path/to/output_dir
 
-            # Run with PowerPoint input
-            python test_runner.py --feature-input feature_requirements.pptx --output-dir test_results
+            # Input directory should contain:
+            #   input_directory/
+            #   ├── docs/     (documentation files: .docx, .pptx, .xlsx, .pdf, .txt, .md, .html)
+            #   └── code/     (source code files for reference)
 
-            # Run with Word document input
-            python test_runner.py --feature-input feature_spec.docx --output-dir test_results
-
-            # Run with Excel input
-            python test_runner.py --feature-input requirements.xlsx --output-dir test_results
-
-            # Only generate test plan from PDF
-            python test_runner.py --generate-plan-only --feature-input requirements.pdf --output-dir test_results
+            # Only generate test plan from input directory
+            python test_runner.py --generate-plan-only --input-dir path/to/input_directory --output-dir test_results
 
             # Only run test automation (requires existing test plan)
             python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir test_results
 
-            # Generate tests from feature input without executing them
-            python test_runner.py --feature-input path/to/feature_input.json --output-dir path/to/output_dir --execute-tests=false
+            # Generate tests from input directory without executing them
+            python test_runner.py --input-dir path/to/input_directory --output-dir path/to/output_dir --execute-tests=false
 
             # Generate tests from existing test plan without executing them
             python test_runner.py --test-plan path/to/plan.json --output-dir path/to/output_dir --execute-tests=false
@@ -351,10 +350,9 @@ def main() -> None:
     )
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
-    parser.add_argument('--feature-input', help='Path to feature info file (supports multiple formats: JSON, DOCX, PPTX, XLSX, PDF, TXT)')
+    parser.add_argument('--input-dir', help='Path to input directory containing docs/ and code/ subdirectories')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
-    parser.add_argument('--list-formats', action='store_true', help='List all supported input formats and exit')
 
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
@@ -362,23 +360,12 @@ def main() -> None:
                            help='Only generate test plan, skip test automation')
     step_group.add_argument('--test-automation-only', action='store_true',
                            help='Only run test automation, skip test plan generation')
-    
+
     # Test execution control
-    parser.add_argument('--execute-tests', type=lambda x: x.lower() in ('true', '1', 'yes'), 
+    parser.add_argument('--execute-tests', type=lambda x: x.lower() in ('true', '1', 'yes'),
                        default=True, help='Execute generated tests (default: True). Set to False to only generate tests without execution.')
 
     args = parser.parse_args()
-
-    # Handle list formats option
-    if args.list_formats:
-        converter = InputConverter()
-        print("Supported input file formats:")
-        print("=" * 40)
-        for ext, desc in converter.get_supported_formats().items():
-            print(f"  {ext:<8} : {desc}")
-        print("\nNote: The system will automatically detect the format and convert")
-        print("      all inputs to JSON format before processing.")
-        return
 
     # Determine which steps to run
     generate_plan = True
@@ -406,7 +393,7 @@ def main() -> None:
         test_plan_file=args.test_plan,
         generate_plan=generate_plan,
         run_automation=run_automation,
-        feature_info_file=args.feature_input
+        input_dir=args.input_dir
     )
 
     success = runner.run(execute_tests=args.execute_tests)
