@@ -1,0 +1,100 @@
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background-color: #121212;
+  color: #f1f1f1;
+}
+
+h3 {
+  text-align: center;
+  background-color: #1f1f1f;
+  padding: 15px;
+  margin: 0;
+  font-size: 24px;
+  color: #fff;
+  border-bottom: 2px solid #333;
+}
+
+#terminal {
+  height: 300px;
+  min-height: 300px;
+  background-color: #1e1e1e;
+  border-bottom: 2px solid #333;
+  padding: 10px;
+}
+
+.container {
+  padding: 20px;
+  margin-top:150px;
+}
+
+label {
+  margin-right: 10px;
+  font-weight: 500;
+}
+
+select,
+input[type="text"],
+input[type="file"] {
+  padding: 8px;
+  border: none;
+  border-radius: 5px;
+  background-color: #2a2a2a;
+  color: #fff;
+  width: 250px;
+}
+
+button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background-color: #007bff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 10px;
+}
+
+.upload-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 45%;
+  min-width: 300px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.actions {
+  margin-top: 20px;
+}
+
+@media (max-width: 600px) {
+  .upload-group {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  select,
+  input[type="text"],
+  input[type="file"] {
+    width: 100%;
+  }
+}

@@ -59,10 +59,8 @@ llm_config = {
     "temperature": 0.1,
 }
 
-URLS_LIST = [
-    #"https://docs.pytorch.org/docs/stable/distributed.html",
-]
-PYC_CODE = 'code'
+URLS_FILE = 'input_dirs/public_urls.txt'
+PYC_CODE = 'input_dirs'
 os.environ["OPENAI_API_BASE"] = EMBEDDING_BASE_URL
 
 
@@ -429,8 +427,8 @@ class MultiAgentTestOrchestrator:
             )
 
         kb_success = self.build_knowledge_base(
-            code_dirs=[PYC_CODE],
-            urls=URLS_LIST
+            input_dirs=PYC_CODE,
+            urls=URLS_FILE
         )
         if not kb_success:
             self.logger.log("Orchestrator", "Warning: Knowledge base initialization failed, proceeding without it")
@@ -459,7 +457,7 @@ class MultiAgentTestOrchestrator:
         failed_files = []
 
         for impl_file in implementation_files:
-            if self._process_implementation_file_with_groupchat(impl_file, test_cases):
+            if self._process_implementation_file_with_groupchat(impl_file, test_cases,test_plan_path):
                 successful_files.append(impl_file)
             else:
                 failed_files.append(impl_file)
@@ -476,7 +474,7 @@ class MultiAgentTestOrchestrator:
         self.logger.log("Orchestrator", f"Successfully generated tests for {len(successful_files)}/{len(implementation_files)} files")
         return all_files_generated
 
-    def _process_implementation_file_with_groupchat(self, impl_file: str, all_test_cases: List[Dict]) -> bool:
+    def _process_implementation_file_with_groupchat(self, impl_file: str, all_test_cases: List[Dict],test_plan_path: str) -> bool:
         """Process a single implementation file using GroupChat for dynamic agent interaction"""
         # Filter relevant test cases
         relevant_tests = [tc for tc in all_test_cases if tc.get('implementation_file') == impl_file]
@@ -511,10 +509,12 @@ class MultiAgentTestOrchestrator:
             self.group_chat.messages = []  # Clear previous messages
 
             # Get context from knowledge base if available
+            context_dict=self.read_json_to_dict(test_plan_path)
+            context_input=f"Test is {context_dict['tests'][0]['test_category']}"
             context = ""
             if self.kb:
                 try:
-                    context = self.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
+                    context = self.kb.retrive_document_chunks(context_input)
                     if "[Error]" in context or not context:
                         self.logger.log("Orchestrator", f"WARNING: Failed to retrieve doc chunks for {impl_file}, proceeding without context")
                         context = ""
@@ -577,6 +577,20 @@ class MultiAgentTestOrchestrator:
         except Exception as e:
             self.logger.log("Orchestrator", f"ERROR: GroupChat failed for {impl_file}: {str(e)}")
             return False
+
+    def read_json_to_dict(self,file_path):
+        '''Reads a JSON file and returns its contents as a dictionary.'''
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                data = json.load(file)
+                return data
+        except FileNotFoundError:
+            print(f"Error: The file {file_path} was not found.")
+        except json.JSONDecodeError:
+            print(f"Error: The file {file_path} is not a valid JSON file.")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+
 
     def _format_test_cases_for_chat(self, test_cases: List[Dict]) -> str:
         """Format test cases for group chat message"""
@@ -771,6 +785,9 @@ class MultiAgentTestOrchestrator:
                 existing_files = set(os.listdir(self.output_dir))
 
                 for expected_file in expected_files:
+                    if f"test_{expected_file}" in existing_files:
+                        expected_file=f"test_{expected_file}"
+                        
                     if expected_file in existing_files:
                         actually_generated_files.append(expected_file)
                     else:
@@ -814,9 +831,13 @@ class MultiAgentTestOrchestrator:
         try:
             if not os.path.exists(self.output_dir):
                 return False
-
+            
             file_path = os.path.join(self.output_dir, expected_file)
+            file_path_alt=os.path.join(self.output_dir, f"test_{expected_file}")
+            if os.path.exists(file_path_alt)==True:
+                file_path=file_path_alt
             exists = os.path.exists(file_path)
+            print(exists)
 
             if exists:
                 # Check if file has meaningful content (not empty)
@@ -895,7 +916,7 @@ class MultiAgentTestOrchestrator:
             self.logger.log("Orchestrator", f"Error checking generated test files: {str(e)}")
             return False
 
-    def build_knowledge_base(self, code_dirs, urls):
+    def build_knowledge_base(self, input_dirs, urls):
         """Build the knowledge base
 
         Args:
@@ -907,7 +928,7 @@ class MultiAgentTestOrchestrator:
         """
         if self.kb:
             try:
-                self.kb.build_index(code_dirs, urls)
+                self.kb.build_index(input_dirs, urls)
                 return True
             except Exception as e:
                 print(f"Warning: Failed to build knowledge base: {e}")
