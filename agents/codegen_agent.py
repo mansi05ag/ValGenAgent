@@ -40,10 +40,6 @@ from prompts.test_coordinator_system_prompt import TEST_COORDINATOR_AGENT_SYSTEM
 # Load environment variables
 load_dotenv()
 
-# Get Intel API key
-# api_key = get_openai_api_key()
-
-
 # Configure autogen for Intel's internal API
 config_list = [
     {
@@ -59,11 +55,11 @@ llm_config = {
     "temperature": 0.1,
 }
 
-URLS_LIST = [
-    #"https://docs.pytorch.org/docs/stable/distributed.html",
-]
-PYC_CODE = 'code'
+
+INPUT_DIR = 'input_dirs'
+URLS_FILE = f"{INPUT_DIR}/public_urls.txt"
 os.environ["OPENAI_API_BASE"] = EMBEDDING_BASE_URL
+
 
 
 @dataclass
@@ -351,8 +347,8 @@ class MultiAgentTestOrchestrator:
         self.execute_tests = execute_tests
 
         # check if source code dir exists
-        if not os.path.exists(PYC_CODE):
-            raise FileNotFoundError(f"The source code directory '{PYC_CODE}' does not exist.")
+        if not os.path.exists(INPUT_DIR):
+            raise FileNotFoundError(f"The source code directory '{INPUT_DIR}' does not exist.")
 
         # Initialize the agents
         # Create the code generation agent
@@ -429,8 +425,8 @@ class MultiAgentTestOrchestrator:
             )
 
         kb_success = self.build_knowledge_base(
-            code_dirs=[PYC_CODE],
-            urls=URLS_LIST
+            input_dirs=INPUT_DIR,
+            urls=URLS_FILE
         )
         if not kb_success:
             self.logger.log("Orchestrator", "Warning: Knowledge base initialization failed, proceeding without it")
@@ -895,7 +891,7 @@ class MultiAgentTestOrchestrator:
             self.logger.log("Orchestrator", f"Error checking generated test files: {str(e)}")
             return False
 
-    def build_knowledge_base(self, code_dirs, urls):
+    def build_knowledge_base(self, input_dirs, urls):
         """Build the knowledge base
 
         Args:
@@ -907,7 +903,7 @@ class MultiAgentTestOrchestrator:
         """
         if self.kb:
             try:
-                self.kb.build_index(code_dirs, urls)
+                self.kb.build_index(input_dirs, urls)
                 return True
             except Exception as e:
                 print(f"Warning: Failed to build knowledge base: {e}")
