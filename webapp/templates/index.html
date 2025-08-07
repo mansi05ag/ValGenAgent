@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ValGenAgent UI</title>
+  <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css"> -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="/static/styles.css">
+  <!-- Latest CDN version -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+
+</head>
+<body>
+
+  <h3>ValGenAgent</h3>
+  <div id="terminal"></div>
+
+  <div class="container">
+
+    <div class="section">
+      <label>Connection Type:</label>
+      <select id="connectionType">
+        <option value="container">Container</option>
+        <option value="custom">Custom Command</option>
+      </select>
+      <input type="text" id="container" placeholder="Container name">
+      <input type="text" id="customCmd" placeholder="Custom command">
+    </div>
+
+    <div class="row">
+      <div class="upload-group">
+        <label><i class="fa-solid fa-file"></i> Feature File:</label>
+        <input type="file" id="featureFile" >
+      </div>
+
+      <div class="upload-group">
+        <label><i class="fa-solid fa-folder"></i> Code ZIP:</label>
+        <input type="file" id="codeZip" accept=".zip">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="upload-group">
+        <label><i class="fa-solid fa-folder"></i> Docs ZIP:</label>
+        <input type="file" id="docsZip" accept=".zip">
+      </div>
+
+      <div class="upload-group">
+        <label><i class="fa-solid fa-link"></i> Public URLs File:</label>
+        <input type="file" id="urlsFile" accept=".txt">
+      </div>
+    </div>
+
+    <div class="section">
+      <label><i class="fa-solid fa-gears"></i> Functionality:</label>
+      <select id="functionality">
+        <option value="complete_workflow">End to End</option>
+        <option value="generate_plan_only">Test Plan Only</option>
+        <option value="generate_and_execute">Generate and Execute tests from plan</option>
+        <option value="generate_tests_from_plan">Generate Tests from Plan</option>
+        <option value="generate_tests_from_raw">Generate Tests from Raw File</option>
+      </select>
+    </div>
+
+    <div class="actions">
+      <button id="connectBtn" >Connect</button>
+      <button id="runBtn" disabled>Run</button>
+      <a id="downloadBtn" href="#" style="display:none;" class="button" download>
+        <button><i class="fa-solid fa-download"></i> Download</button>
+      </a>
+    </div>
+
+  </div>
+
+  <script src="/static/main.js" defer></script>
+</body>
+</html>
+
