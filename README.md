@@ -1,20 +1,47 @@
 
 #  ValGenAgent
 
-ValGenAgent is an **agentic framework** for automated test plan generation and execution on hardware using **RAG (Retrieval-Augmented Generation)**. It simplifies validation workflows by generating test plans from input files, refining them via RAG, generating the test cases, executing test cases on target device, and repeating until successful(or max iterations).
+ValGenAgent is a **RAG-powered, AI agents based pipeline** for automated:
+- Test plan generation (in doc/json format).
+- Test case generation (in .py/.cpp/.c/.s etc) using generated test plan or user provided test plan.
+- Execution of test cases on target platform (HW/Simulator)
+
+It simplifies software validation workflows by generating test plans (from feature input files), generating
+the test cases and, executing tests cases on target device. The pipeline uses existing source code, documents,
+public URLs to create a vector index which provides context to LLM (GPT-4o) for better code genetion.
+It provides flexibility to user to selectively use all three or single execution flow.
+
+Note: The pipeline uses iGPT tokens (provided by Intel IT) for embedding and inference hence it is completely safe to use even with your proprietary code.
+
+Please check the following resources for iGPT access:
+- IGpt API Access: https://wiki.ith.intel.com/display/GenAI/Requesting+Access
+- Internal API Access: https://api-portal-internal.intel.com/my-apps
+- Getting started: https://wiki.ith.intel.com/display/GenAI/Using+the+Inference+API
+
+LlamaIndex and autogen are used for pipeline creation.
 
 ---
 
 ##  Features
 
 -  RAG-Based Test Plan Generation
--  Test case generation
--  Loop Until Success(or max iterations): Automatically retries until validation passes
--  Test Case Execution on target device
--  Organized Result Storage in `test_results/`
--  Supports Code + Document Inputs
--  LLM + Context-Aware Retrieval Pipeline
+-  RAG-Based Test Case Generation
+-  Code Review is done by Agent
+-  Test Case Execution on target device (HW/Simulator) by Agent
+-  Test reports are generated with full details
+-  Supports source code (c/cpp/python/assembly) + Documents (docx/pptx/pdf etc.) + Pulic URLs as inputs for richer context
+-  Langugae aware and Hierarchical parser
+-  Context-aware retrieval Pipeline
 
+---
+
+End-to-End pipeline
+
+![Alt text](./E2E-pipeline.jpg "End-to-End pipeline")
+
+---
+
+Testcase generation workflow
 
 ![Alt text](./workflow-arch.jpg "Workflow Architecture")
 
@@ -23,26 +50,28 @@ ValGenAgent is an **agentic framework** for automated test plan generation and e
 
 ##  Input Support
 
-ValGenAgent accepts both code and document files as input for RAG context.
+ValGenAgent can consume source codes (c/cpp/python/assembly), documents (docx/pptx/pdf etc.) files,
+and public URLs (un-restricted access) as inputs for richer context while creating test plan and test codes.
 
-###  All Coding Languages are supported. These languages are using language specific parser
+###  It supports language aware parser for the folowing Coding Languages
 
 - `C`
 - `C++`
 - `Python`
 - `Assembly`
+- Other languages are parsed using a **HierarchicalNodeParser**. More language support is in progress.
 
-Other languages are parsed using a **HierarchicalNodeParser**.
-
-###  Supported File Formats
+###  Supported file formats
 
 ValGenAgent uses [`SimpleDirectoryReader`](https://docs.llamaindex.ai/en/stable/module_guides/loading/simpledirectoryreader/) from LlamaIndex, and supports:
 
-- `.txt`, `.md`, `.py`, `.c`, `.cpp`, `.s`, `.json`, `.docx`, `.xlsx`, `.pptx`, etc.
+- `.txt`, `.md`, `.py`, `.c`, `.cpp`, `.s`, `.json`, `.docx`, `.xlsx`, `.pptx`, `pdf`, etc.
+- Unsupported file will be treated as plane text
 
 ---
-## Input Directory Structure
-All Inputs should be kept in this folder inside the respective files.
+## Where to keep inputs (codes/docs/public_urls etc.) ?
+All inputs should be kept in this `input_dirs` directory as follows:
+
 ```
 input_dirs/
 ├── code/              # Source code files (C, C++, Python, etc.)
@@ -52,7 +81,7 @@ input_dirs/
 
 ##  Output Directory Structure
 
-All outputs (plans, scripts, logs) are saved under `test_results/`:
+All outputs (plans, scripts, logs) are saved under user provided directory name ex: `test_results/` as follows:
 
 ```
 test_results/
@@ -69,12 +98,13 @@ test_results/
 
 ##  Command-Line Usage
 
-Get started with ValGenAgent using the terminal.
+Following are the steps to use it:
 
 ###  Initial Setup
 
-1. **Prepare Target Hardware**  
-   Ensure the device (e.g., 8-card Gaudi container) is up and running.
+1. **Prepare Target Hardware/Simulator env**
+   - If you are using Gaudi, ensure you have 8-card Gaudi container up and running.
+   - For any other system, connect to the targer machine.
 
 2. **Clone the Repository**
    ```bash
@@ -89,141 +119,81 @@ Get started with ValGenAgent using the terminal.
 
 ---
 
-###  Prepare Input Directory
+###  Prepare input directory
 
-Put the code, docs, and public urls inside the `input_dirs`.
-
+Put your code, docs, and public urls inside the `input_dirs`. Alternatively, create a softlink accordingly.
 
 ---
 
-###  Create Feature Input File
+###  Create feature input file in .json format
+```
+This is the prompt/instruction file used to generate test cases.
+    The feature input file should contain:
+    {
+      "name": "Feature Name",
+      "description": "Detailed feature description..."
+    }
 
-This is the instruction/spec file used to generate test cases.
-Supported formats include: `.json`, `.docx`, `.pptx`, `.xlsx`, `.txt`
-
+Please refer feature_description/collective_feature.json
+```
 ---
 
 ###  Run the Agent
 
 ```bash
-python test_runner.py --feature-input <path_to_input_file> --output-dir test_results
+python test_runner.py --feature_input <path_to_input_file> --output_dir test_results
 ```
 
 ---
 
-###  Multi-Format Input Examples
+###  other example command
 
 ```bash
-python test_runner.py --feature-input input_file/collective_feature.json --output-dir test_results
-python test_runner.py --feature-input requirements.docx --output-dir test_results
-python test_runner.py --feature-input feature_spec.pptx --output-dir test_results
-python test_runner.py --feature-input requirements.xlsx --output-dir test_results
-python test_runner.py --feature-input requirements.txt --output-dir test_results
+# Just generate test cases - don't run them
+python test_runner.py --feature_input input_file/collective_feature.json --output_dir test_results --execute_tests=false
+
+# Generate just the test plan based on the input file
+python test_runner.py --feature_input input_file/collective_feature.json --generate_plan-only --output-dir test_results
+
+# just generate tests based on user provided test plan
+python test_runner.py --test_plan path/to/plan.json --output_dir path/to/output_dir --execute-tests=false
 ```
 
 ---
 
-###  List All Supported Formats
-
-```bash
-python test_runner.py --list-formats
-```
-
----
-
-##  Use Cases
+##  Use cases
 
 This application supports various types of execution plans. Depending on the requirement, you can either:
-- only create the test cases,
-- just generate the test plan,
-- or run the complete End-to-End workflow.
+- Only create the test cases
+- Only generate the test plan
+- Run the complete End-to-End workflow - test plan generation, test code generation, and execution
 
-### 1. End-to-End Workflow
-Run the full pipeline — plan generation, test case creation, and execution:
 
-```bash
-python test_runner.py --feature-input input_file/collective_feature.json --output-dir test_results
-```
+## Web based
 
-### 2. Only Test Plan Generation
-Generate just the test plan based on the input file:
+We provide a user interface to use this tool. It offers simple interactive UI that has currently support what we user can do using command line.
 
-```bash
-python test_runner.py --feature-input input_file/collective_feature.json --generate-plan-only --output-dir test_results
-```
-
-### 3. Run from Existing Test Plan
-Use an existing plan to automate the test execution:
-
-```bash
-python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir test_results
-```
-
-### 4. Generate Test Cases Only
-Generate test cases without executing them:
-
-```bash
-python test_runner.py --feature-input path/to/feature_input.json --output-dir path/to/output_dir --execute-tests=false
-```
-Generate tests from existing test plan without executing them:
-
-```bash
-python test_runner.py --test-plan path/to/plan.json --output-dir path/to/output_dir --execute-tests=false
-```
----
-
-## Webapplication
-
-We provide a user interface to use this tool. This help us simple through interactive ui run the commands on the device that we are targetting. For example a 8 card gaudi container.
-
-### Steps to run the application:
+### Steps to start the application:
 1. First clone the repo on your personal vm
    ```bash
    git clone https://github.com/mansi05ag/ValGenAgent.git
    cd ValGenAgent
+   pip install -r requirements.txt
    ```
-2. Now go inside the directory ValGenAgent_webapplication
-   ```bash
-   cd ValGenAgent_webapplication
-   ```
-3. Now we install all the requirements
-   ```bash
-   pip install -r requirements-app.txt
-   ```
-4. After that run the application
-   ```bash
-   python app.py
-   ```
-5. Access the application at the defined port 8002 and through the ui.
-
-## Webapplication
-
-We provide a user interface to use this tool. This help us simple through interactive ui run the commands on the device that we are targetting. For example a 8 card gaudi container.
-
-### Steps to run the application:
-1. First clone the repo on your personal vm
-   ```bash
-   git clone https://github.com/mansi05ag/ValGenAgent.git
-   cd ValGenAgent
-   ```
-2. Now go inside the directory ValGenAgent_webapplication
+2. Now go inside the directory webapp
    ```bash
    cd webapp
    ```
-3. Now we install all the requirements
+3. After that run the application
    ```bash
-   pip install -r requirements.txt
+   python app.py
    ```
-4. After that run the application
-   for running the application we must provide a common directory accessible by both the vm and the device you are connecting to.
-   ```bash
-   python app.py --common_dir <path to a common directory>
-   ```
-5. Access the application at the defined port 8002 and through the ui.
+5. Access the application using port no. 8002 through url.
 
-#  How to Use the Application
 
-Follow these steps to run the application smoothly:
+#  How to Use the web application
+
+Steps to run the application using UI:
 
 ---
 
