@@ -1,15 +1,16 @@
 
 #  ValGenAgent
 
-ValGenAgent is an **agentic framework** for automated test plan generation and execution on hardware using **RAG (Retrieval-Augmented Generation)**. It simplifies validation workflows by generating test plans from input files, refining them via RAG, executing on-device test cases, and repeating until successful.
+ValGenAgent is an **agentic framework** for automated test plan generation and execution on hardware using **RAG (Retrieval-Augmented Generation)**. It simplifies validation workflows by generating test plans from input files, refining them via RAG, generating the test cases, executing test cases on target device, and repeating until successful(or max iterations).
 
 ---
 
 ##  Features
 
 -  RAG-Based Test Plan Generation
--  Loop Until Success: Automatically retries until validation passes
--  On-Device Test Case Execution
+-  Test case generation
+-  Loop Until Success(or max iterations): Automatically retries until validation passes
+-  Test Case Execution on target device
 -  Organized Result Storage in `test_results/`
 -  Supports Code + Document Inputs
 -  LLM + Context-Aware Retrieval Pipeline
@@ -207,15 +208,16 @@ We provide a user interface to use this tool. This help us simple through intera
    ```
 2. Now go inside the directory ValGenAgent_webapplication
    ```bash
-   cd ValGenAgent_webapplication
+   cd webapp
    ```
 3. Now we install all the requirements
    ```bash
-   pip install -r requirements-app.txt
+   pip install -r requirements.txt
    ```
 4. After that run the application
+   for running the application we must provide a common directory accessible by both the vm and the device you are connecting to.
    ```bash
-   python app.py
+   python app.py --common_dir <path to a common directory>
    ```
 5. Access the application at the defined port 8002 and through the ui.
 
