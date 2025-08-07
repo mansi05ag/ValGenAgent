@@ -84,6 +84,7 @@ class TestWorkflowRunner:
 
         try:
             print(f"Processing input directory: {self.input_dir}")
+            stage_start = time.time()
 
             # Use document processor to create feature info
             success, json_file_path, feature_info = self.doc_processor.process_input_directory(
@@ -91,11 +92,14 @@ class TestWorkflowRunner:
                 output_dir=str(self.output_dir)
             )
 
+            stage_time = time.time() - stage_start
+
             if not success:
                 print("Failed to process input directory")
                 return {}
 
             print(f"Feature input JSON saved to: {json_file_path}")
+            print(f"Document processing completed in {stage_time:.2f} seconds")
             return feature_info
 
         except Exception as e:
@@ -112,6 +116,7 @@ class TestWorkflowRunner:
             return True, self.test_plan_file
 
         try:
+            print("Loading feature information...")
             feature_info = self.load_feature_info()
 
             # Extract name from feature_info and create filename
@@ -131,6 +136,9 @@ class TestWorkflowRunner:
                 with open(feature_info_path, 'w') as f:
                     json.dump(feature_info, f)
 
+            print("Generating test plan with AI...")
+            plan_start = time.time()
+
             success = generate_test_plan_files(
                 output_file=str(test_plan_file),
                 json_file=str(test_plan_json),
@@ -138,9 +146,13 @@ class TestWorkflowRunner:
                 verbose=self.verbose
             )
 
+            plan_time = time.time() - plan_start
+
             if not success:
                 print("Error generating test plan")
                 return False, ""
+
+            print(f"Test plan generation completed in {plan_time:.2f} seconds")
 
             # Clean up temporary file
             if feature_info_path and feature_info_path.exists():
@@ -157,9 +169,11 @@ class TestWorkflowRunner:
 
     def run_test_automation(self, test_plan_file: str, execute_tests: bool = True) -> bool:
         """Run test automation agent to generate and execute tests."""
-        print("Running test automation...")
+        print("Initializing test automation...")
         try:
             output_dir = str(self.output_dir / "generated_tests")
+
+            print("Generating test code...")
 
             # Call the function directly instead of subprocess
             success = run_test_automation(
@@ -175,6 +189,11 @@ class TestWorkflowRunner:
                 print("Error in test automation: Test generation failed")
                 return False
 
+            if execute_tests:
+                print("Test generation and execution completed")
+            else:
+                print("Test code generation completed")
+
             return True
 
         except Exception as e:
@@ -185,6 +204,9 @@ class TestWorkflowRunner:
 
     def collect_test_results(self) -> List[TestResult]:
         """Collect results from test execution."""
+        print("Parsing test results...")
+        results_start = time.time()
+
         results = []
         xml_files = glob.glob(str(self.output_dir / "generated_tests" / "*.xml"))
 
@@ -206,6 +228,9 @@ class TestWorkflowRunner:
             except Exception as e:
                 print(f"Error parsing test results from {xml_file}: {e}")
 
+        results_time = time.time() - results_start
+        print(f"Results collection completed in {results_time:.2f} seconds")
+
         return results
 
     def save_results_to_excel(self, results: List[TestResult]) -> None:
@@ -215,6 +240,9 @@ class TestWorkflowRunner:
             return
 
         try:
+            print("Creating Excel report...")
+            excel_start = time.time()
+
             df = pd.DataFrame([
                 {
                     'Test Name': r.test_name,
@@ -227,7 +255,10 @@ class TestWorkflowRunner:
 
             excel_file = self.output_dir / f"{self.feature_name}_test_results.xlsx"
             df.to_excel(excel_file, index=False)
-            print(f"Test results saved to: {excel_file}")
+
+            excel_time = time.time() - excel_start
+            print(f"Excel report saved to: {excel_file}")
+            print(f"Excel generation completed in {excel_time:.2f} seconds")
 
         except Exception as e:
             print(f"Error saving results to Excel: {e}")
@@ -254,17 +285,26 @@ class TestWorkflowRunner:
         # Print workflow configuration
         self.print_workflow_summary(execute_tests)
 
-        start_time = time.time()
+        workflow_start = time.time()
         test_plan_file = None
 
         # Step 1: Generate test plan (if enabled)
         if self.generate_plan:
-            print("Step 1: Generating test plan...")
+            print("\n" + "="*60)
+            print("STAGE 1: TEST PLAN GENERATION")
+            print("="*60)
+            stage1_start = time.time()
+
             success, test_plan_file = self.generate_test_plan()
+
+            stage1_time = time.time() - stage1_start
+
             if not success:
-                print("Failed to generate test plan.")
+                print("FAILED: Failed to generate test plan.")
                 return False
-            print(f"Test plan generated successfully: {test_plan_file}")
+
+            print(f"SUCCESS: Stage 1 completed successfully in {stage1_time:.2f} seconds")
+            print(f"   Test plan saved: {test_plan_file}")
         else:
             # Use provided test plan file or look for existing one
             if self.test_plan_file and os.path.exists(self.test_plan_file):
@@ -289,35 +329,55 @@ class TestWorkflowRunner:
 
         # Step 2: Run test automation (if enabled)
         if self.run_automation:
-            print("Step 2: Running test automation...")
+            print("\n" + "="*60)
+            if execute_tests:
+                print("STAGE 2: TEST CODE GENERATION & EXECUTION")
+            else:
+                print("STAGE 2: TEST CODE GENERATION")
+            print("="*60)
+            stage2_start = time.time()
+
             if not self.run_test_automation(test_plan_file, execute_tests):
-                print("Failed to run test automation.")
+                print("FAILED: Failed to run test automation.")
                 return False
-            print("Test automation completed successfully.")
+
+            stage2_time = time.time() - stage2_start
+            print(f"SUCCESS: Stage 2 completed successfully in {stage2_time:.2f} seconds")
 
             # Step 3: Collect and save results (only if automation ran and tests are executed)
             if execute_tests:
-                print("Step 3: Collecting and saving test results...")
+                print("\n" + "="*60)
+                print("STAGE 3: RESULTS COLLECTION & REPORTING")
+                print("="*60)
+                stage3_start = time.time()
+
                 results = self.collect_test_results()
                 self.save_results_to_excel(results)
 
-                # Print summary
-                execution_time = time.time() - start_time
+                stage3_time = time.time() - stage3_start
+                print(f"SUCCESS: Stage 3 completed successfully in {stage3_time:.2f} seconds")
+
+                # Print test execution summary
                 passed = sum(1 for r in results if r.status == 'Passed')
                 failed = sum(1 for r in results if r.status == 'Failed')
 
-                print("\nTest Execution Summary:")
+                print("\n" + "="*60)
+                print("TEST EXECUTION SUMMARY")
+                print("="*60)
                 print(f"Total Tests: {len(results)}")
                 print(f"Passed: {passed}")
                 print(f"Failed: {failed}")
-                print(f"Total Execution Time: {execution_time:.2f} seconds")
+                print(f"Success Rate: {(passed/len(results)*100):.1f}%" if results else "0%")
+
+                workflow_time = time.time() - workflow_start
+                print(f"\nTotal Workflow Time: {workflow_time:.2f} seconds")
 
                 return failed == 0
             else:
                 print("Test execution step skipped.")
 
-        execution_time = time.time() - start_time
-        print(f"Total Execution Time: {execution_time:.2f} seconds")
+        workflow_time = time.time() - workflow_start
+        print(f"\nTotal Workflow Time: {workflow_time:.2f} seconds")
         return True
 
 def main() -> None:
