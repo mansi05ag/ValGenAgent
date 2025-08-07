@@ -80,7 +80,7 @@ def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dic
         print(f"Error generating test plan: {str(e)}")
         return False, {}, ""
 
-def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, feature_info: str) -> bool:
+def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, feature_info) -> bool:
     """Create a Word document from the test plan.
 
     Args:
@@ -99,6 +99,8 @@ def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, featu
             title_text = f'Test Plan: {feature_info["name"]}'
         elif isinstance(feature_info, str):
             title_text = f'Test Plan: {feature_info}'
+        elif 'test_plan' in test_plan:
+            title_text = f'Test Plan: {test_plan["test_plan"]}'
         elif 'test_category' in test_plan:
             title_text = f'Test Plan: {test_plan["test_category"]}'
         else:
@@ -107,21 +109,78 @@ def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, featu
         title = doc.add_heading(title_text, 0)
         title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-        # Handle different JSON structure
-        if 'test_category' in test_plan and 'test_cases' in test_plan:
+        # Handle the new JSON structure with "tests" containing multiple categories
+        if 'tests' in test_plan:
+            tests_data = test_plan['tests']
+
+            # Handle case where tests is a dict with multiple test categories
+            if isinstance(tests_data, dict):
+                for key, category_data in tests_data.items():
+                    if isinstance(category_data, dict) and 'test_category' in category_data:
+                        # Add category heading
+                        cat_heading = doc.add_heading(f'Category: {category_data["test_category"]}', level=1)
+
+                        # Add implementation file if present
+                        if 'implementation_file' in category_data:
+                            doc.add_paragraph(f'Implementation File: {category_data["implementation_file"]}')
+                            doc.add_paragraph()  # Add spacing
+
+                        # Add test cases
+                        if 'test_cases' in category_data:
+                            test_cases = category_data['test_cases']
+                            if isinstance(test_cases, list):
+                                for test_case in test_cases:
+                                    if isinstance(test_case, dict):
+                                        tc_heading = doc.add_heading(f'Test Case: {test_case.get("test_id", "Unknown")}', level=2)
+                                        doc.add_paragraph(f'Description: {test_case.get("description", "No description provided")}')
+                                        doc.add_paragraph()  # Add spacing
+                            elif isinstance(test_cases, dict):
+                                # Handle case where test_cases is a dict
+                                for test_id, test_info in test_cases.items():
+                                    if isinstance(test_info, dict):
+                                        tc_heading = doc.add_heading(f'Test Case: {test_id}', level=2)
+                                        doc.add_paragraph(f'Description: {test_info.get("description", "No description provided")}')
+                                    else:
+                                        tc_heading = doc.add_heading(f'Test Case: {test_id}', level=2)
+                                        doc.add_paragraph(f'Description: {test_info}')
+                                    doc.add_paragraph()  # Add spacing
+
+            # Handle case where tests is a list
+            elif isinstance(tests_data, list):
+                for category_data in tests_data:
+                    if isinstance(category_data, dict) and 'test_category' in category_data:
+                        cat_heading = doc.add_heading(f'Category: {category_data["test_category"]}', level=1)
+
+                        if 'implementation_file' in category_data:
+                            doc.add_paragraph(f'Implementation File: {category_data["implementation_file"]}')
+                            doc.add_paragraph()
+
+                        if 'test_cases' in category_data:
+                            for test_case in category_data['test_cases']:
+                                tc_heading = doc.add_heading(f'Test Case: {test_case.get("test_id", "Unknown")}', level=2)
+                                doc.add_paragraph(f'Description: {test_case.get("description", "No description provided")}')
+                                doc.add_paragraph()
+
+        # Handle legacy structure (backward compatibility)
+        elif 'test_category' in test_plan and 'test_cases' in test_plan:
             cat_heading = doc.add_heading(f'Category: {test_plan["test_category"]}', level=1)
             for test_case in test_plan['test_cases']:
-
                 tc_heading = doc.add_heading(f'Test Case {test_case["test_id"]}', level=2)
                 doc.add_paragraph(f'Description: {test_case["description"]}')
-
-                # Add spacing between test cases
                 doc.add_paragraph()
+
+        # If no recognizable structure, just dump the content
+        else:
+            doc.add_paragraph("Test Plan Content:")
+            doc.add_paragraph(json.dumps(test_plan, indent=2))
+
         doc.save(output_file)
         return True
 
     except Exception as e:
         print(f"Error creating Word document: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def generate_test_plan_files(output_file: str, json_file: str, feature_info_file: Optional[str] = None, verbose: bool = False) -> bool:
