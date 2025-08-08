@@ -8,14 +8,18 @@ torch>=2.0.0
 pytest-timeout
 requests>=2.31.0
 openpyxl>=3.1.2
-pyautogen>=0.2.0
 autogen>=0.9.6
 openai>=1.0.0
 
 llama-index
+llama-index-readers-web>=0.1.7
+llama-index-llms-openai-like>=0.1.2
 beautifulsoup4>=4.12.0
+tree_sitter_language_pack
 
 # Additional document processing libraries for multi-format input support
 python-pptx>=0.6.21        # PowerPoint files
 PyPDF2>=3.0.1              # PDF files (alternative: pymupdf)
-xlrd>=2.0.1                # Legacy Excel files (.xls)
+docx2txt>=0.8
+python-docx>=0.8.11
+
