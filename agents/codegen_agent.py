@@ -507,10 +507,12 @@ class MultiAgentTestOrchestrator:
             self.group_chat.messages = []  # Clear previous messages
 
             # Get context from knowledge base if available
+            test_categories_string = ' '.join({tc['test_category'] for tc in relevant_tests})
+            context_input=f"Test is {test_categories_string}"
             context = ""
             if self.kb:
                 try:
-                    context = self.kb.retrive_document_chunks("all reduce PyTorch Collective API test cases")
+                    context = self.kb.retrive_document_chunks(context_input)
                     if "[Error]" in context or not context:
                         self.logger.log("Orchestrator", f"WARNING: Failed to retrieve doc chunks for {impl_file}, proceeding without context")
                         context = ""
