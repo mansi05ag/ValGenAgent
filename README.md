@@ -53,7 +53,7 @@ Testcase generation workflow
 ValGenAgent can consume source codes (c/cpp/python/assembly), documents (docx/pptx/pdf etc.) files,
 and public URLs (un-restricted access) as inputs for richer context while creating test plan and test codes.
 
-###  It supports language aware parser for the folowing Coding Languages
+###  It supports language aware parser for the following coding languages
 
 - `C`
 - `C++`
