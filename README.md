@@ -185,9 +185,11 @@ We provide a user interface to use this tool. It offers simple interactive UI th
    cd webapp
    ```
 3. After that run the application
+
    ```bash
-   python app.py
+   python app.py --common_dir <path to common directory>
    ```
+   > Note: For running the application we must provide a common directory accessible by both the vm and the device you are connecting to.
 5. Access the application using port no. 8002 through url.
 
 
