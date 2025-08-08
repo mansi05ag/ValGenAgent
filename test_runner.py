@@ -37,7 +37,7 @@ from utils.document_processor import DocumentProcessor
 
 # Import the modules directly
 from test_plangenerator import generate_test_plan_files
-from agents.test_codegen_agent import run_test_automation
+from agents.codegen_agent import run_test_automation
 
 # Load environment variables
 load_dotenv()
