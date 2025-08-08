@@ -3,16 +3,11 @@
 Enhanced Test Workflow Runner
 
 This script coordinates the entire test workflow:
-1. Accept input directory containing docs/ and code/ subdirectories
-2. Generate test plan document using documentation from docs/ directory
-3. Run test_automation_agent.py to create test code using code/ directory for reference
-4. Execute the generated tests
-5. Record results in an Excel file
-
-Input Directory Structure:
-input_directory/
-├── docs/     (documentation files: .docx, .pptx, .xlsx, .pdf, .txt, .md, .html, etc.)
-└── code/     (source code files for reference during test generation)
+1. Accept feature input file (JSON) containing name and description fields
+2. Load additional documentation from static input_dirs directory (docs/ and public_urls_testplan.txt)
+3. Generate test plan document using combined feature info and additional documentation
+4. Run test_automation_agent.py to create test code using code/ directory for reference
+5. Execute the generated tests
 """
 
 import os
@@ -55,15 +50,18 @@ class TestWorkflowRunner:
 
     def __init__(self, output_dir: str, verbose: bool = False,
                  test_plan_file: Optional[str] = None,
-                 input_dir: Optional[str] = None, api_key = None,
+                 feature_input_file: Optional[str] = None, api_key = None,
                  generate_plan: bool = True, run_automation: bool = True):
         self.output_dir = Path(output_dir)
         self.verbose = verbose
         self.test_plan_file = test_plan_file
         self.api_key = api_key or get_openai_api_key()
-        self.input_dir = input_dir
+        self.feature_input_file = feature_input_file
         self.generate_plan = generate_plan
         self.run_automation = run_automation
+
+        # Static input directory for documents and URLs
+        self.input_dirs_path = Path("input_dirs")
 
         # Initialize feature_name (will be set when loading feature info)
         self.feature_name = "sample"
@@ -78,36 +76,62 @@ class TestWorkflowRunner:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def load_feature_info(self) -> Dict:
-        """Load feature information from input directory, creating a structured feature input JSON."""
-        if not self.input_dir or not os.path.exists(self.input_dir):
+        """Load feature information from feature input file."""
+        if not self.feature_input_file or not os.path.exists(self.feature_input_file):
+            print("Warning: No feature input file provided or file does not exist")
             return {}
 
         try:
-            print(f"Processing input directory: {self.input_dir}")
-            stage_start = time.time()
+            print(f"Loading feature information from: {self.feature_input_file}")
 
-            # Use document processor to create feature info
-            success, json_file_path, feature_info = self.doc_processor.process_input_directory(
-                input_dir=self.input_dir,
-                output_dir=str(self.output_dir)
-            )
+            with open(self.feature_input_file, 'r', encoding='utf-8') as f:
+                feature_info = json.load(f)
 
-            stage_time = time.time() - stage_start
-
-            if not success:
-                print("Failed to process input directory")
+            # Validate required fields
+            if 'name' not in feature_info or 'description' not in feature_info:
+                print("Error: Feature input file must contain 'name' and 'description' fields")
                 return {}
 
-            print(f"Feature input JSON saved to: {json_file_path}")
-            print(f"Document processing completed in {stage_time:.2f} seconds")
+            print(f"Loaded feature: {feature_info['name']}")
             return feature_info
 
         except Exception as e:
-            print(f"Error loading feature info from input directory: {e}")
+            print(f"Error loading feature info from file: {e}")
             import traceback
             if self.verbose:
                 traceback.print_exc()
             return {}
+
+    def load_additional_docs_content(self) -> str:
+        """Load additional documentation content from input_dirs directory."""
+        if not self.input_dirs_path.exists():
+            print(f"Warning: Static input directory {self.input_dirs_path} does not exist")
+            return ""
+
+        try:
+            print(f"Loading additional documentation from: {self.input_dirs_path}")
+            stage_start = time.time()
+
+            # Load documents from docs directory and URLs
+            doc_infos = self.doc_processor.load_documents_from_directory(self.input_dirs_path / "docs")
+
+            if not doc_infos:
+                print("No additional documentation found")
+                return ""
+
+            # Prepare content for inclusion in test plan generation
+            prepared_content = self.doc_processor.prepare_content(doc_infos)
+
+            stage_time = time.time() - stage_start
+            print(f"Additional documentation loading completed in {stage_time:.2f} seconds")
+            return prepared_content
+
+        except Exception as e:
+            print(f"Error loading additional documentation: {e}")
+            import traceback
+            if self.verbose:
+                traceback.print_exc()
+            return ""
 
     def generate_test_plan(self) -> Tuple[bool, str]:
         """Generate test plan document."""
@@ -119,30 +143,43 @@ class TestWorkflowRunner:
             print("Loading feature information...")
             feature_info = self.load_feature_info()
 
+            if not feature_info:
+                print("Error: No valid feature information found")
+                return False, ""
+
             # Extract name from feature_info and create filename
-            if feature_info and 'name' in feature_info:
-                feature_name = feature_info['name']
-                # Clean the name for use as filename (remove spaces, special chars)
-                feature_name = "".join(c for c in feature_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                feature_name = feature_name.replace(' ', '_').lower()
-                self.feature_name = feature_name  # Store for use in other methods
+            feature_name = feature_info['name']
+            # Clean the name for use as filename (remove spaces, special chars)
+            feature_name = "".join(c for c in feature_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            feature_name = feature_name.replace(' ', '_').lower()
+            self.feature_name = feature_name  # Store for use in other methods
 
             test_plan_file = self.output_dir / f"{self.feature_name}_test_plan.docx"
             test_plan_json = self.output_dir / f"{self.feature_name}_test_plan.json"
 
-            feature_info_path = None
-            if feature_info:
-                feature_info_path = self.output_dir / "temp_feature_info.json"
-                with open(feature_info_path, 'w') as f:
-                    json.dump(feature_info, f)
+            # Load additional documentation content
+            additional_docs_content = self.load_additional_docs_content()
 
-            print("Generating test plan with AI...")
+            # Combine feature info with additional documentation
+            enhanced_feature_info = feature_info.copy()
+            if additional_docs_content:
+                enhanced_feature_info['additional_documentation'] = additional_docs_content
+                print("Added additional documentation content to feature info")
+
+            # Save enhanced feature info to temporary file
+            feature_info_path = self.output_dir / "temp_feature_info.json"
+            with open(feature_info_path, 'w', encoding='utf-8') as f:
+                json.dump(enhanced_feature_info, f, indent=2, ensure_ascii=False)
+
+            print(f"Temporary feature info saved to: {feature_info_path}")
+
+            print("Generating test plan...")
             plan_start = time.time()
 
             success = generate_test_plan_files(
                 output_file=str(test_plan_file),
                 json_file=str(test_plan_json),
-                feature_info_file=str(feature_info_path) if feature_info_path else None,
+                feature_info_file=str(feature_info_path),
                 verbose=self.verbose
             )
 
@@ -274,10 +311,11 @@ class TestWorkflowRunner:
         print(f"Execute Tests: {'Yes' if execute_tests else 'No'}")
         if self.test_plan_file:
             print(f"Test Plan File: {self.test_plan_file}")
-        if self.input_dir:
-            print(f"Input Directory: {self.input_dir}")
-            print(f"  - Docs Directory: {Path(self.input_dir) / 'docs'}")
-            print(f"  - Code Directory: {Path(self.input_dir) / 'code'}")
+        if self.feature_input_file:
+            print(f"Feature Input File: {self.feature_input_file}")
+        print(f"Static Input Directory: {self.input_dirs_path}")
+        print(f"  - Docs Directory: {self.input_dirs_path / 'docs'}")
+        print(f"  - URLs File: {self.input_dirs_path / 'public_urls_testplan.txt'}")
         print("=" * 60)
 
     def run(self, execute_tests: bool = True) -> bool:
@@ -383,26 +421,21 @@ class TestWorkflowRunner:
 def main() -> None:
 
     parser = argparse.ArgumentParser(
-        description='Run the complete test workflow using input directory with docs/ and code/ subdirectories',
+        description='Run the complete test workflow using a feature input file and static input_dirs directory',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
             Examples:
-            # Run complete workflow (generate plan + run automation) with input directory
-            python test_runner.py --input-dir path/to/input_directory --output-dir path/to/output_dir
+            # Run complete workflow (generate plan + run automation) with feature input file
+            python test_runner.py --feature-input-file path/to/feature.json --output-dir path/to/output_dir
 
-            # Input directory should contain:
-            #   input_directory/
-            #   ├── docs/     (documentation files: .docx, .pptx, .xlsx, .pdf, .txt, .md, .html)
-            #   └── code/     (source code files for reference)
-
-            # Only generate test plan from input directory
-            python test_runner.py --generate-plan-only --input-dir path/to/input_directory --output-dir test_results
+            # Only generate test plan from feature input file
+            python test_runner.py --generate-plan-only --feature-input-file path/to/feature.json --output-dir test_results
 
             # Only run test automation (requires existing test plan)
             python test_runner.py --test-automation-only --test-plan path/to/plan.json --output-dir test_results
 
-            # Generate tests from input directory without executing them
-            python test_runner.py --input-dir path/to/input_directory --output-dir path/to/output_dir --execute-tests=false
+            # Generate tests from feature input file without executing them
+            python test_runner.py --feature-input-file path/to/feature.json --output-dir path/to/output_dir --execute-tests=false
 
             # Generate tests from existing test plan without executing them
             python test_runner.py --test-plan path/to/plan.json --output-dir path/to/output_dir --execute-tests=false
@@ -410,7 +443,7 @@ def main() -> None:
     )
     parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
     parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
-    parser.add_argument('--input-dir', help='Path to input directory containing docs/ and code/ subdirectories')
+    parser.add_argument('--feature-input-file', help='Path to feature input JSON file containing name and description fields')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
 
@@ -453,7 +486,7 @@ def main() -> None:
         test_plan_file=args.test_plan,
         generate_plan=generate_plan,
         run_automation=run_automation,
-        input_dir=args.input_dir
+        feature_input_file=args.feature_input_file
     )
 
     success = runner.run(execute_tests=args.execute_tests)

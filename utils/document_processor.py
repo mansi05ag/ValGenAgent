@@ -31,6 +31,7 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("torch").setLevel(logging.ERROR)
 
 from llama_index.core import SimpleDirectoryReader
+from llama_index.readers.web import BeautifulSoupWebReader
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -110,47 +111,57 @@ class DocumentProcessor:
         doc_infos = []
         total_tokens = 0
 
+        # Load regular files
         all_files = []
         for file_path in docs_path.rglob('*'):
             if file_path.is_file() and not file_path.name.startswith('.'):
                 all_files.append(file_path)
 
-        if not all_files:
-            print(f"No files found in {docs_path}")
+        if all_files:
+            print(f"Found {len(all_files)} files to process")
+
+            for file_path in all_files:
+                try:
+                    # First try with SimpleDirectoryReader (supports many formats)
+                    content = self._load_with_simple_reader(file_path)
+
+                    if not content:
+                        # Fallback to UTF-8 text reading
+                        content = self._load_with_utf8_fallback(file_path)
+
+                    if content and content.strip():
+                        token_count = self.count_tokens(content)
+
+                        doc_info = DocumentInfo(
+                            file_name=file_path.name,
+                            content=content.strip(),
+                            token_count=token_count,
+                            file_path=str(file_path)
+                        )
+                        doc_infos.append(doc_info)
+                        total_tokens += token_count
+
+                        if self.verbose:
+                            print(f"  {file_path.name}: {token_count:,} tokens")
+                    else:
+                        if self.verbose:
+                            print(f"  {file_path.name}: No content extracted")
+
+                except Exception as e:
+                    print(f"  Failed to load {file_path.name}: {e}")
+                    continue
+
+        # Check for URLs file in parent directory
+        input_dir = docs_path.parent
+        urls_file = input_dir / "public_urls.txt"
+        if urls_file.exists():
+            url_docs = self._load_urls_from_file(urls_file)
+            doc_infos.extend(url_docs)
+            total_tokens += sum(doc.token_count for doc in url_docs)
+
+        if not doc_infos:
+            print(f"No documents found in {docs_path}")
             return []
-
-        print(f"Found {len(all_files)} files to process")
-
-        for file_path in all_files:
-            try:
-                # First try with SimpleDirectoryReader (supports many formats)
-                content = self._load_with_simple_reader(file_path)
-
-                if not content:
-                    # Fallback to UTF-8 text reading
-                    content = self._load_with_utf8_fallback(file_path)
-
-                if content and content.strip():
-                    token_count = self.count_tokens(content)
-
-                    doc_info = DocumentInfo(
-                        file_name=file_path.name,
-                        content=content.strip(),
-                        token_count=token_count,
-                        file_path=str(file_path)
-                    )
-                    doc_infos.append(doc_info)
-                    total_tokens += token_count
-
-                    if self.verbose:
-                        print(f"  {file_path.name}: {token_count:,} tokens")
-                else:
-                    if self.verbose:
-                        print(f"  {file_path.name}: No content extracted")
-
-            except Exception as e:
-                print(f"  Failed to load {file_path.name}: {e}")
-                continue
 
         print(f"Successfully loaded {len(doc_infos)} documents")
         print(f"Total content: {total_tokens:,} tokens")
@@ -246,6 +257,57 @@ class DocumentProcessor:
                 print(f"    PPTX extraction failed for {pptx_file.name}: {e}")
 
         return ""
+
+    def _load_urls_from_file(self, urls_file: Path) -> List[DocumentInfo]:
+        """Load documents from URLs listed in a file."""
+        if not urls_file.exists():
+            if self.verbose:
+                print(f"URLs file not found: {urls_file}")
+            return []
+
+        try:
+            with open(urls_file, "r", encoding="utf-8") as f:
+                urls_content = f.read()
+
+            urls = [url.strip() for url in urls_content.split("\n") if url.strip()]
+            # ignore if line starts with comment
+            urls = [url for url in urls if not url.startswith("#")]
+
+            if not urls:
+                if self.verbose:
+                    print(f"No valid URLs found in {urls_file}")
+                return []
+
+            print(f"Loading {len(urls)} URLs from {urls_file.name}")
+
+            # Load URLs using BeautifulSoupWebReader
+            url_loader = BeautifulSoupWebReader()
+            url_docs = url_loader.load_data(urls=urls)
+
+            doc_infos = []
+            for i, doc in enumerate(url_docs):
+                if doc.text and doc.text.strip():
+                    token_count = self.count_tokens(doc.text)
+                    doc_info = DocumentInfo(
+                        file_name=f"url_{i+1}.html",
+                        content=doc.text.strip(),
+                        token_count=token_count,
+                        file_path=urls[i] if i < len(urls) else f"url_{i+1}"
+                    )
+                    doc_infos.append(doc_info)
+
+                    if self.verbose:
+                        print(f"  {urls[i] if i < len(urls) else f'url_{i+1}'}: {token_count:,} tokens")
+
+            print(f"Successfully loaded {len(doc_infos)} URL documents")
+            return doc_infos
+
+        except Exception as e:
+            print(f"Warning: Failed to load URLs from {urls_file}: {e}")
+            if self.verbose:
+                import traceback
+                traceback.print_exc()
+            return []
 
     def prepare_content(self, doc_infos: List[DocumentInfo]) -> str:
         if not doc_infos:
@@ -451,7 +513,7 @@ class DocumentProcessor:
                 print("No documents found to process")
                 return False, "", {}
 
-            # Prepare content for AI processing
+            # Prepare content for processing
             prepared_content = self.prepare_content(doc_infos)
 
             if not prepared_content:

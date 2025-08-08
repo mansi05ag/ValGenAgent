@@ -264,21 +264,17 @@ class InputConverter:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     json_content = json.load(f)
 
-                # Validate that it has required structure
-                if self._validate_json_structure(json_content):
-                    print(f"   JSON file is already in correct format")
-                    # Even for valid JSON, save a copy if output_file is specified
-                    if output_file and output_file != file_path:
-                        try:
-                            with open(output_file, 'w', encoding='utf-8') as f:
-                                json.dump(json_content, f, indent=2)
-                            print(f"   Copied to: {output_file}")
-                            return True, output_file, json_content
-                        except Exception as e:
-                            logger.error(f"Error copying JSON file: {e}")
-                    return True, file_path, json_content
-                else:
-                    print(f"   JSON file doesn't match expected structure, converting via AI...")
+                print(f"   JSON file loaded successfully")
+                # Even for valid JSON, save a copy if output_file is specified
+                if output_file and output_file != file_path:
+                    try:
+                        with open(output_file, 'w', encoding='utf-8') as f:
+                            json.dump(json_content, f, indent=2)
+                        print(f"   Copied to: {output_file}")
+                        return True, output_file, json_content
+                    except Exception as e:
+                        logger.error(f"Error copying JSON file: {e}")
+                return True, file_path, json_content
             except Exception as e:
                 print(f"   Error reading JSON file: {e}")
                 return False, "", {}
@@ -326,10 +322,6 @@ class InputConverter:
             print(f"   Error saving JSON file: {e}")
             logger.error(f"Error saving JSON file: {e}")
             return False, "", {}
-
-    def _validate_json_structure(self, json_content: Dict[str, Any]) -> bool:
-        required_fields = ['name', 'description']
-        return all(field in json_content for field in required_fields)
 
     def _convert_text_to_json_with_ai(self, text_content: str, original_file: str) -> Optional[Dict[str, Any]]:
         """
@@ -389,13 +381,7 @@ class InputConverter:
 
             response_text = response.choices[0].message.content
             json_content = json.loads(response_text)
-
-            # Validate the response
-            if self._validate_json_structure(json_content):
-                return json_content
-            else:
-                logger.error("AI response doesn't match expected JSON structure")
-                return None
+            return json_content
 
         except Exception as e:
             logger.error(f"Error converting text to JSON with AI: {e}")
