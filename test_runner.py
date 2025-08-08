@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
-import shutil
 
 # Import the new OpenAI API key utility
 from utils.openai_api_key_utils import get_openai_api_key
@@ -419,21 +418,6 @@ class TestWorkflowRunner:
         print(f"\nTotal Workflow Time: {workflow_time:.2f} seconds")
         return True
 
-def remove_index_db(index_db_dir):
-    if os.path.exists(index_db_dir):
-        for filename in os.listdir(index_db_dir):
-            file_path = os.path.join(index_db_dir, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f'Failed to delete {file_path}. Reason: {e}')
-        print(f"Deleted the contents of the directory: {index_db_dir}")
-    else:
-        print(f"The directory {index_db_dir} does not exist.")
-
 def main() -> None:
 
     parser = argparse.ArgumentParser(
@@ -462,7 +446,6 @@ def main() -> None:
     parser.add_argument('--feature-input-file', help='Path to feature input JSON file containing name and description fields')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
-    parser.add_argument('--remove-existing-index-db', action='store_true', help='deletes the already created index db for RAG')
 
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
@@ -480,6 +463,7 @@ def main() -> None:
     # Determine which steps to run
     generate_plan = True
     run_automation = True
+
     if args.generate_plan_only:
         generate_plan = True
         run_automation = False
@@ -495,11 +479,6 @@ def main() -> None:
             print("Mode: Complete workflow (generate plan + test automation + execution)")
         else:
             print("Mode: Generate tests only (skip execution)")
-
-    index_db_dir='index_db/'
-    if args.remove_existing_index_db:
-        remove_index_db(index_db_dir=index_db_dir)
-        
 
     runner = TestWorkflowRunner(
         output_dir=args.output_dir,
