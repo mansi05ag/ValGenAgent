@@ -23,4 +23,4 @@ python-pptx>=0.6.21        # PowerPoint files
 PyPDF2>=3.0.1              # PDF files (alternative: pymupdf)
 docx2txt>=0.8
 python-docx>=0.8.11
-nbconvert
+nbconvert>=7.16.6
