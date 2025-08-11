@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
+import shutil
 
 # Import the new OpenAI API key utility
 from utils.openai_api_key_utils import get_openai_api_key
@@ -446,7 +447,7 @@ def main() -> None:
     parser.add_argument('--feature-input-file', help='Path to feature input JSON file containing name and description fields')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
-
+    parser.add_argument('--remove_index_db', action='store_true', help='deletes the already created index db for RAG')
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
     step_group.add_argument('--generate-plan-only', action='store_true',
@@ -479,6 +480,14 @@ def main() -> None:
             print("Mode: Complete workflow (generate plan + test automation + execution)")
         else:
             print("Mode: Generate tests only (skip execution)")
+    
+    index_db_dir='index_db/'
+    if args.remove_index_db:
+        if os.path.exists(index_db_dir):
+            shutil.rmtree(index_db_dir)
+            print(f"Deleted the directory: {index_db_dir}")
+        else:
+            print(f"The directory {index_db_dir} does not exist.")
 
     runner = TestWorkflowRunner(
         output_dir=args.output_dir,
