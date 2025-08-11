@@ -17,9 +17,10 @@ llama-index-llms-openai-like>=0.1.2
 beautifulsoup4>=4.12.0
 tree_sitter_language_pack
 
+
 # Additional document processing libraries for multi-format input support
 python-pptx>=0.6.21        # PowerPoint files
 PyPDF2>=3.0.1              # PDF files (alternative: pymupdf)
 docx2txt>=0.8
 python-docx>=0.8.11
-
+nbconvert
