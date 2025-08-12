@@ -107,22 +107,22 @@ class KnowledgeBase:
         nodes = []
         for doc in docs:
             if doc.metadata.get("file_name", "").endswith(".py"):
-                final_parser = CodeHierarchyNodeParser(
+                parser = CodeHierarchyNodeParser(
                     language="python",
                     code_splitter=CodeSplitter(language="python", chunk_lines=1000, max_chars=2000)
                 )
             elif doc.metadata.get("file_name", "").endswith(".cpp"):
-                final_parser = CodeHierarchyNodeParser(
+                parser = CodeHierarchyNodeParser(
                     language="cpp",
                     code_splitter=CodeSplitter(language="cpp", chunk_lines=30, max_chars=2000)
                 )
             elif doc.metadata.get("file_name", "").endswith(".c"):
-                final_parser = CodeHierarchyNodeParser(
+                parser = CodeHierarchyNodeParser(
                     language="c",
                     code_splitter=CodeSplitter(language="c", chunk_lines=30, max_chars=2000)
                 )
             elif doc.metadata.get("file_name", "").endswith(".asm"):
-                final_parser = CodeHierarchyNodeParser(
+                parser = CodeHierarchyNodeParser(
                     language="asm",
                     code_splitter=CodeSplitter(language="asm", chunk_lines=20, max_chars=2000)
                 )
@@ -131,15 +131,14 @@ class KnowledgeBase:
                 # This will handle text, markdown, html, etc.
                 # It will also handle code files that are not specifically parsed above
                 # by splitting them into smaller nodes based on content length.
-                final_parser = doc_parser
+                parser = doc_parser
 
-            nodes += final_parser.get_nodes_from_documents([doc])
+            nodes += parser.get_nodes_from_documents([doc])
 
-        # Replace None relationships with empty lists -> The CodeHierarchyNodeParser if there is no next or previous relationships sets it to none but expected to be empty list.
+        # Replace None relationships with empty lists -> The CodeHierarchyNodeParser if there is no next or previous relationships sets it to none but expected to be empty list.(seeing error without this)
         for node in nodes:
              if hasattr(node, "relationships"):
                  node.relationships.update({k: [] for k, v in node.relationships.items() if v is None})
-
 
         print(f"[Info]: Parsed {len(nodes)} nodes from {len(docs)} documents")
         return nodes
