@@ -16,6 +16,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.readers.web import BeautifulSoupWebReader
 from llama_index.llms.openai_like import OpenAILike
 from llama_index.core.node_parser import CodeSplitter, HierarchicalNodeParser
+from llama_index.packs.code_hierarchy import CodeHierarchyNodeParser
 
 class KnowledgeBase:
     """Knowledge base using LlamaIndex for document retrieval and querying"""
@@ -106,19 +107,39 @@ class KnowledgeBase:
         nodes = []
         for doc in docs:
             if doc.metadata.get("file_name", "").endswith(".py"):
-                nodes += CodeSplitter(language="python", chunk_lines=30, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+                final_parser = CodeHierarchyNodeParser(
+                    language="python",
+                    code_splitter=CodeSplitter(language="python", chunk_lines=1000, max_chars=2000)
+                )
             elif doc.metadata.get("file_name", "").endswith(".cpp"):
-                nodes += CodeSplitter(language="cpp", chunk_lines=30, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+                final_parser = CodeHierarchyNodeParser(
+                    language="cpp",
+                    code_splitter=CodeSplitter(language="cpp", chunk_lines=30, max_chars=2000)
+                )
             elif doc.metadata.get("file_name", "").endswith(".c"):
-                nodes += CodeSplitter(language="c", chunk_lines=30, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+                final_parser = CodeHierarchyNodeParser(
+                    language="c",
+                    code_splitter=CodeSplitter(language="c", chunk_lines=30, max_chars=2000)
+                )
             elif doc.metadata.get("file_name", "").endswith(".asm"):
-                nodes += CodeSplitter(language="asm", chunk_lines=15, chunk_lines_overlap=5).get_nodes_from_documents([doc])
+                final_parser = CodeHierarchyNodeParser(
+                    language="asm",
+                    code_splitter=CodeSplitter(language="asm", chunk_lines=20, max_chars=2000)
+                )
             else:
                 # Fallback to hierarchical parser for other types
                 # This will handle text, markdown, html, etc.
                 # It will also handle code files that are not specifically parsed above
                 # by splitting them into smaller nodes based on content length.
-                nodes += doc_parser.get_nodes_from_documents([doc])
+                final_parser = doc_parser
+
+            nodes += final_parser.get_nodes_from_documents([doc])
+
+        # Replace None relationships with empty lists -> The CodeHierarchyNodeParser if there is no next or previous relationships sets it to none but expected to be empty list.
+        for node in nodes:
+             if hasattr(node, "relationships"):
+                 node.relationships.update({k: [] for k, v in node.relationships.items() if v is None})
+
 
         print(f"[Info]: Parsed {len(nodes)} nodes from {len(docs)} documents")
         return nodes
