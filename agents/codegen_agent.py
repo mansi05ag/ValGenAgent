@@ -17,7 +17,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from utils.openai_api_key_utils import get_openai_api_key
+from utils.expected_patterns import LANGUAGE_PATTERNS
 from utils.openai_endpoints import (
     EMBEDDING_BASE_URL,
     INFERENCE_BASE_URL,
@@ -541,8 +541,11 @@ class MultiAgentTestOrchestrator:
             # Manage context after conversation to keep it within limits
             self._manage_context_length()
 
+            _, ext = os.path.splitext(impl_file)
+            language=ext.lstrip(".")
+
             # Check if we have successful test generation
-            success = self._extract_success_from_chat()
+            success = self._extract_success_from_chat(language)
 
             # Additionally verify that the specific file was actually created
             file_actually_created = self._verify_file_created(impl_file)
@@ -593,83 +596,57 @@ class MultiAgentTestOrchestrator:
             formatted.append("")  # Empty line for separation
         return '\n'.join(formatted)
 
-    def _extract_success_from_chat(self) -> bool:
-        """Extract success status from the group chat messages and logger"""
-        # Look for test generation success patterns in the chat first
-        generation_patterns = [
-            r'def test_.*\(',  # pytest test function definitions
-            r'import pytest',  # pytest imports
-            r'class Test.*:',  # test class definitions
-            r'```python',  # code blocks containing test code
-            r'test.*\.py',  # any mention of test files
-            r'LGTM',  # review approval
-            r'looks good',  # review approval
-            r'approved',  # review approval
-            r'filename.*\.py',  # file creation patterns
-        ]
+    def _extract_success_from_chat(self, language='py') -> bool:
+        """Extract success status from the group chat messages and logger for a specific language"""
+        if language not in LANGUAGE_PATTERNS:
+            self.logger.log("Orchestrator", f"Unsupported language: {language}")
+            return False
 
-        # Check if test code was generated in the chat
+        patterns = LANGUAGE_PATTERNS[language]
+        file_extension = language
+
+        # Check for test generation patterns
         for message in self.group_chat.messages:
             content = str(message.get('content', ''))
-            for pattern in generation_patterns:
+            for pattern in patterns['generation']:
                 if re.search(pattern, content, re.IGNORECASE):
                     self.logger.log("Orchestrator", f"TEST GENERATION PATTERN MATCHED: '{pattern}' in GroupChat message")
                     return True
 
-        # If execute_tests is False, look for file saving success patterns
+        # Check for file saving patterns if execute_tests is False
         if not self.execute_tests:
-            file_saving_patterns = [
-                r'Code saved to.*\.py',  # File saving confirmation
-                r'File saved.*\.py',  # File saving confirmation
-                r'Saved.*\.py',  # File saving confirmation
-                r'Successfully saved.*\.py',  # File saving confirmation
-                r'Written to.*\.py',  # File writing confirmation
-                r'Created.*\.py',  # File creation confirmation
-                r'with open.*\.py.*w.*as f',  # File operation pattern
-                r'f\.write\(',  # File write operation
-                r'exitcode.*0',  # Successful code execution
-            ]
-
-            # Check GroupChat messages for file saving patterns
             for message in self.group_chat.messages:
                 content = str(message.get('content', ''))
-                for pattern in file_saving_patterns:
+                for pattern in patterns['file_saving']:
                     if re.search(pattern, content, re.IGNORECASE):
                         self.logger.log("Orchestrator", f"FILE SAVING PATTERN MATCHED: '{pattern}' in GroupChat message")
                         return True
 
-        # If execute_tests is True, also look for execution success patterns
+        # Check for execution success patterns if execute_tests is True
         if self.execute_tests:
-            execution_patterns = [
-                r'SUCCESS:.*Test execution completed successfully',
-                r'Test execution completed successfully',
-                r'\d+\s+passed\s+in\s+[\d.]+s',  # pytest pattern like "3 passed in 36.82s"
-                r'=+\s*\d+\s+passed.*=+',  # pytest summary pattern
-            ]
-
-            # Check GroupChat messages for execution patterns
             for message in self.group_chat.messages:
                 content = str(message.get('content', ''))
-                for pattern in execution_patterns:
+                for pattern in patterns['execution']:
                     if re.search(pattern, content, re.IGNORECASE):
                         if 'failed' not in content.lower() or 'passed' in content.lower():
                             self.logger.log("Orchestrator", f"EXECUTION SUCCESS PATTERN MATCHED: '{pattern}' in GroupChat message")
                             return True
 
-        # Check if any .py files exist in output directory
+        # Check if any files exist in output directory
         try:
             if os.path.exists(self.output_dir):
-                py_files = [f for f in os.listdir(self.output_dir) if f.endswith('.py')]
-                if py_files:
-                    self.logger.log("Orchestrator", f"SUCCESS: Found {len(py_files)} Python files in output directory: {py_files}")
+                files = []
+                files.extend([f for f in os.listdir(self.output_dir) if f.endswith(f'.{file_extension}')])
+                if files:
+                    self.logger.log("Orchestrator", f"SUCCESS: Found {len(files)} {language} files in output directory: {files}")
                     return True
         except Exception as e:
-            self.logger.log("Orchestrator", f"Error checking for Python files: {e}")
+            self.logger.log("Orchestrator", f"Error checking for {language} files: {e}")
 
         # Fallback: check if any meaningful conversation happened
         meaningful_messages = [msg for msg in self.group_chat.messages
-                             if len(str(msg.get('content', ''))) > 100]
-        if len(meaningful_messages) >= 3:  # At least coordinator, codegen, and review messages
+                               if len(str(msg.get('content', ''))) > 100]
+        if len(meaningful_messages) >= 3:
             self.logger.log("Orchestrator", f"SUCCESS: Meaningful conversation detected with {len(meaningful_messages)} substantial messages")
             return True
 
