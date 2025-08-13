@@ -33,10 +33,6 @@ except ImportError as e:
     VECTOR_DB_AVAILABLE = False
     KnowledgeBase = None
 
-from prompts.code_agent_system_prompt import CODE_AGENT_SYSTEM_PROMPT
-from prompts.review_agent_system_prompt import REVIEW_AGENT_SYSTEM_PROMPT
-from prompts.test_coordinator_system_prompt import TEST_COORDINATOR_AGENT_SYSTEM_PROMPT
-
 # Load environment variables
 load_dotenv()
 
@@ -338,13 +334,22 @@ class ContextManagedGroupChat(autogen.GroupChat):
             self.logger.log("GroupChat", f"Context auto-managed: reduced to {len(self.messages)} messages")
 
 class MultiAgentTestOrchestrator:
-    def __init__(self, output_dir: str, max_retries: int = 2, max_context_messages: int = 25, execute_tests: bool = True):
+    def __init__(self, output_dir: str,
+                 max_retries: int = 2,
+                 max_context_messages: int = 25,
+                 execute_tests: bool = True,
+                 code_agent_prompt: str = "",
+                 review_agent_prompt: str = "",
+                 test_coordinator_prompt: str = ""):
         self.output_dir = output_dir
         self.max_retries = max_retries
         self.max_context_messages = max_context_messages
         self.logger = MessageLogger()
         self.kb = None # Knowledge base instance if available
         self.execute_tests = execute_tests
+        self.code_agent_prompt = code_agent_prompt
+        self.review_agent_prompt = review_agent_prompt
+        self.test_coordinator_prompt = test_coordinator_prompt
 
         # check if source code dir exists
         if not os.path.exists(INPUT_DIR):
@@ -355,13 +360,13 @@ class MultiAgentTestOrchestrator:
         self.codegen_agent = autogen.AssistantAgent(
             name="TestGenerationAgent",
             llm_config=llm_config,
-            system_message=CODE_AGENT_SYSTEM_PROMPT)
+            system_message=self.code_agent_prompt)
 
         # Create the review agent
         self.review_agent = autogen.AssistantAgent(
             name="TestCodeReviewAgent",
             llm_config=llm_config,
-            system_message=REVIEW_AGENT_SYSTEM_PROMPT,)
+            system_message=self.review_agent_prompt)
 
         # Create a runner agent to execute tests
         if self.execute_tests:
@@ -376,7 +381,6 @@ class MultiAgentTestOrchestrator:
                 },
             )
         else:
-
             self.runner_agent = autogen.ConversableAgent(
                 name="TestFileSaveAgent",
                 system_message="""You are a file manager. Your job is to save code to files when requested.
@@ -410,7 +414,7 @@ class MultiAgentTestOrchestrator:
         self.manager = autogen.GroupChatManager(
             groupchat=self.group_chat,
             llm_config=llm_config,
-            system_message=TEST_COORDINATOR_AGENT_SYSTEM_PROMPT,
+            system_message=self.test_coordinator_prompt,
         )
 
         os.makedirs(output_dir, exist_ok=True)
@@ -914,9 +918,15 @@ class MultiAgentTestOrchestrator:
             print("Warning: Cannot build knowledge base - dependencies not available")
             return False
 
-def run_test_automation(test_plan_path: str, output_dir: str = "generated_tests",
-                       max_retries: int = 20, max_context: int = 25, verbose: bool = False,
-                       execute_tests: bool = True) -> bool:
+def run_test_automation(test_plan_path: str,
+                        output_dir: str = "generated_tests",
+                       max_retries: int = 20,
+                       max_context: int = 25,
+                       verbose: bool = False,
+                       execute_tests: bool = True,
+                       code_agent_prompt: str = "",
+                       review_agent_prompt: str = "",
+                       test_coordinator_prompt: str = "") -> bool:
     """
     Run the multi-agent test automation system.
 
@@ -956,7 +966,10 @@ def run_test_automation(test_plan_path: str, output_dir: str = "generated_tests"
             output_dir=output_dir,
             max_retries=max_retries,
             max_context_messages=max_context,
-            execute_tests=execute_tests
+            execute_tests=execute_tests,
+            code_agent_prompt=code_agent_prompt,
+            review_agent_prompt=review_agent_prompt,
+            test_coordinator_prompt=test_coordinator_prompt
         )
 
         success = orchestrator.orchestrate_test_generation(test_plan_path)

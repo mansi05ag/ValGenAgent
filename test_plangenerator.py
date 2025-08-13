@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List
 from dotenv import load_dotenv
 import openai
 from openai import OpenAI
-from prompts.test_plan_generation_system_prompt import TEST_PLAN_SYSTEM_PROMPT
+from prompts.collective.test_plan_generation_system_prompt import TEST_PLAN_SYSTEM_PROMPT
 
 # Load environment variables
 load_dotenv()

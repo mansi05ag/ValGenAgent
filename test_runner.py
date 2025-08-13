@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from dotenv import load_dotenv
 import shutil
+import importlib
 
 # Import the new OpenAI API key utility
 from utils.openai_api_key_utils import get_openai_api_key
@@ -49,10 +50,16 @@ class TestResult:
 class TestWorkflowRunner:
     """Manages the end-to-end test workflow"""
 
-    def __init__(self, output_dir: str, verbose: bool = False,
+    def __init__(self, output_dir: str,
+                 verbose: bool = False,
                  test_plan_file: Optional[str] = None,
-                 feature_input_file: Optional[str] = None, api_key = None,
-                 generate_plan: bool = True, run_automation: bool = True):
+                 feature_input_file: Optional[str] = None,
+                 api_key = None,
+                 generate_plan: bool = True,
+                 run_automation: bool = True,
+                 code_agent_prompt: Optional[str] = None,
+                 review_agent_prompt: Optional[str] = None,
+                 test_coordinator_prompt: Optional[str] = None):
         self.output_dir = Path(output_dir)
         self.verbose = verbose
         self.test_plan_file = test_plan_file
@@ -60,6 +67,9 @@ class TestWorkflowRunner:
         self.feature_input_file = feature_input_file
         self.generate_plan = generate_plan
         self.run_automation = run_automation
+        self.code_agent_prompt = code_agent_prompt
+        self.review_agent_prompt = review_agent_prompt
+        self.test_coordinator_prompt = test_coordinator_prompt
 
         # Static input directory for documents and URLs
         self.input_dirs_path = Path("input_dirs")
@@ -212,7 +222,6 @@ class TestWorkflowRunner:
             output_dir = str(self.output_dir / "generated_tests")
 
             print("Generating test code...")
-
             # Call the function directly instead of subprocess
             success = run_test_automation(
                 test_plan_path=test_plan_file,
@@ -220,7 +229,10 @@ class TestWorkflowRunner:
                 max_retries=2,  # default value
                 max_context=25,  # default value
                 verbose=self.verbose,
-                execute_tests=execute_tests
+                execute_tests=execute_tests,
+                code_agent_prompt=self.code_agent_prompt,
+                review_agent_prompt=self.review_agent_prompt,
+                test_coordinator_prompt=self.test_coordinator_prompt,
             )
 
             if not success:
@@ -420,7 +432,6 @@ class TestWorkflowRunner:
         return True
 
 def main() -> None:
-
     parser = argparse.ArgumentParser(
         description='Run the complete test workflow using a feature input file and static input_dirs directory',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -448,6 +459,7 @@ def main() -> None:
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
     parser.add_argument('--remove_index_db', action='store_true', help='deletes the already created index db for RAG')
+
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
     step_group.add_argument('--generate-plan-only', action='store_true',
@@ -456,10 +468,21 @@ def main() -> None:
                            help='Only run test automation, skip test plan generation')
 
     # Test execution control
-    parser.add_argument('--execute-tests', type=lambda x: x.lower() in ('true', '1', 'yes'),
-                       default=True, help='Execute generated tests (default: True). Set to False to only generate tests without execution.')
+    parser.add_argument('--execute-tests', type=lambda x: x.lower() in ('true', '1', 'yes'), default=True,
+                        help='Execute generated tests (default: True). Set it to false to only generate tests without execution.')
 
+    parser.add_argument('--prompt_for', type=str, required=True,
+                        help='which system prompt to use for the test generation workflow. Choose from: [collective, cutlass]')
     args = parser.parse_args()
+
+    try:
+        # Dynamically import the module based on the prompt
+        code_agent_prompt = importlib.import_module(f'prompts.{args.prompt_for}.code_agent_system_prompt')
+        review_agent_prompt = importlib.import_module(f'prompts.{args.prompt_for}.review_agent_system_prompt')
+        test_coordinator_prompt = importlib.import_module(f'prompts.{args.prompt_for}.test_coordinator_system_prompt')
+        print(f"[Info]: Running test workflow with prompt: {args.prompt_for}")
+    except AssertionError as e:
+        assert f"Error in dynamic prompt import : {e}"
 
     # Determine which steps to run
     generate_plan = True
@@ -480,7 +503,7 @@ def main() -> None:
             print("Mode: Complete workflow (generate plan + test automation + execution)")
         else:
             print("Mode: Generate tests only (skip execution)")
-    
+
     index_db_dir='index_db/'
     if args.remove_index_db:
         if os.path.exists(index_db_dir):
@@ -495,7 +518,10 @@ def main() -> None:
         test_plan_file=args.test_plan,
         generate_plan=generate_plan,
         run_automation=run_automation,
-        feature_input_file=args.feature_input_file
+        feature_input_file=args.feature_input_file,
+        code_agent_prompt=code_agent_prompt.CODE_AGENT_SYSTEM_PROMPT,
+        review_agent_prompt=review_agent_prompt.REVIEW_AGENT_SYSTEM_PROMPT,
+        test_coordinator_prompt=test_coordinator_prompt.TEST_COORDINATOR_AGENT_SYSTEM_PROMPT
     )
 
     success = runner.run(execute_tests=args.execute_tests)
