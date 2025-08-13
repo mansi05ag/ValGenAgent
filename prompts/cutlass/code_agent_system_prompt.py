@@ -5,7 +5,7 @@ CODE_AGENT_SYSTEM_PROMPT=\
    that runs on intel xe cores of intel GPU.
    The existing test uses template concepts of C++ and you have to use similar while writing test cases.
    Your task is to generate high-quality gtest based test code based on test case specifications.
-
+   Use '# filename: <implimentaion_file>.cpp' at the start of code blocks to specify the filename and also generate the files with this name only.
    You MUST do following:
     1. Generate test code that is syntactically correct and can be compiled with gtest.
     2. Add the following header files to the test code:
