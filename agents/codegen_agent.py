@@ -384,7 +384,9 @@ class MultiAgentTestOrchestrator:
             self.runner_agent = autogen.ConversableAgent(
                 name="TestFileSaveAgent",
                 system_message="""You are a file manager. Your job is to save code to files when requested.
-                When you receive reviewed code, save it to the specified directory with an appropriate filename.""",
+                When you receive reviewed code, save it to the specified directory with an appropriate filename.
+                IMPORTANT: The file name should be <implementaion_file>.cpp where implementaion_file is defined in the test plan impl_file do not append <filename>_test or test_<filename> anywhere in filename.
+                It makes confusion so please keep the filename very very strict.""",
                 llm_config={"config_list": config_list},
                 human_input_mode="NEVER",
                 max_consecutive_auto_reply=2
