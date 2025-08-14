@@ -796,6 +796,13 @@ class MultiAgentTestOrchestrator:
             if not os.path.exists(self.output_dir):
                 return False
 
+            extensions_and_indicators = {
+                '.py': ['def test_', 'import pytest', 'class Test'],
+                '.cpp': ['TEST(', 'ASSERT_', 'EXPECT_'],
+                '.c': ['TEST(', 'ASSERT_', 'EXPECT_'],
+                '.asm': ['; Test', '; Assert', '; Expect']  # Assembly comments might indicate test content
+            }
+
             file_path = os.path.join(self.output_dir, expected_file)
             exists = os.path.exists(file_path)
 
@@ -803,15 +810,17 @@ class MultiAgentTestOrchestrator:
                 # Check if file has meaningful content (not empty)
                 file_size = os.path.getsize(file_path)
                 if file_size > 0:
-                    # Also check if it contains test-like content
+                   # Also check if it contains test-like content
+                    _, ext = os.path.splitext(expected_file)
+
+                    # Get the test indicators for the file extension
+                    indicators = extensions_and_indicators.get(ext, [])
+
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             content = f.read()
-
                         # Look for test indicators
-                        has_test_content = any(indicator in content for indicator in [
-                            'def test_', 'import pytest', 'class Test', 'import torch', 'torch.distributed'
-                        ])
+                        has_test_content = any(indicator in content for indicator in indicators)
 
                         if has_test_content:
                             self.logger.log("Orchestrator", f"File verified with test content: {expected_file} ({file_size} bytes)")
