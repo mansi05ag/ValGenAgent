@@ -11,12 +11,16 @@ import time
 import functools
 import json
 from datetime import datetime, timedelta
-import subprocess
 import logging
 
+try:
+    import requests
+except ImportError:
+    requests = None
+
 # Set proxy environment variables at module import time
-os.environ["no_proxy"] = ""
-os.environ["NO_PROXY"] = ""
+# os.environ["no_proxy"] = "http://proxy-dmz.intel.com:912"
+# os.environ["NO_PROXY"] = "http://proxy-dmz.intel.com:912"
 
 # Configure logging
 logging.basicConfig(
@@ -41,27 +45,51 @@ def generate_new_api_key():
     """
     logger.info("Generating new OpenAI API key via Intel API...")
 
-    try:
-        # Prepare the curl command to get the access token
-        curl_command = [
-            "bash", "-c",
-            'no_proxy="" && NO_PROXY="" && response=$(curl -X POST "https://apis-internal.intel.com/v1/auth/token" '
-            '-d "grant_type=client_credentials&client_id=4ef1b24a-d699-4118-b1ff-4d0428932883&client_secret=jgK8Q~Z56BnoZN8n2t9VBt5L_6T7HFd.RyIJdaJm" '
-            '-H "Content-Type: application/x-www-form-urlencoded") && echo "$response"'
-        ]
+    if not requests:
+        logger.error("requests library is not available. Please install it with: pip install requests")
+        return None
 
-        # Execute the command and get the response
-        result = subprocess.run(curl_command, capture_output=True, text=True, check=True)
-        response_text = result.stdout.strip()
+    try:
+        # Prepare the request data
+        url = "https://apis-internal.intel.com/v1/auth/token"
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": "4ef1b24a-d699-4118-b1ff-4d0428932883",
+            "client_secret": "jgK8Q~Z56BnoZN8n2t9VBt5L_6T7HFd.RyIJdaJm"
+        }
+
+        # Set proxy settings to bypass any proxy
+        # proxies = {
+        #     'http': "http://proxy-dmz.intel.com:912",
+        #     'https': "http://proxy-dmz.intel.com:912"
+        # }
+
+        proxies = {
+            'no_proxy': "",
+            'NO_PROXY': ""
+        }
+
+        # Make the POST request
+        logger.debug("Making POST request to Intel API...")
+        response = requests.post(url, headers=headers, data=data, proxies=proxies, timeout=30)
+
+        # Check if request was successful
+        if response.status_code != 200:
+            logger.error(f"API request failed with status code: {response.status_code}")
+            logger.debug(f"Response content: {response.text[:100]}...")
+            return None
 
         # Parse the response to extract the access token
         try:
-            response_json = json.loads(response_text)
+            response_json = response.json()
             new_key = response_json.get('access_token')
 
             if not new_key:
                 logger.error("Access token not found in API response")
-                logger.debug(f"API Response: {response_text[:100]}...")  # Log first 100 chars only for security
+                logger.debug(f"API Response: {str(response_json)[:100]}...")  # Log first 100 chars only for security
                 return None
 
             logger.info("Successfully generated new API key")
@@ -69,11 +97,17 @@ def generate_new_api_key():
 
         except json.JSONDecodeError:
             logger.error("Failed to parse JSON response from API")
-            logger.debug(f"Raw response: {response_text[:100]}...")  # Log first 100 chars only for security
+            logger.debug(f"Raw response: {response.text[:100]}...")  # Log first 100 chars only for security
             return None
 
-    except subprocess.SubprocessError as e:
-        logger.error(f"Failed to execute curl command: {str(e)}")
+    except requests.exceptions.Timeout:
+        logger.error("Request timed out while connecting to Intel API")
+        return None
+    except requests.exceptions.ConnectionError:
+        logger.error("Failed to connect to Intel API - check your network connection")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed: {str(e)}")
         return None
     except Exception as e:
         logger.error(f"Failed to generate new API key: {str(e)}")
