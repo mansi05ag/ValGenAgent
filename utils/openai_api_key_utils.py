@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 OpenAI API Key Management Utility
-
 This module provides functionality to cache and manage OpenAI API keys
 with automatic expiration and regeneration.
 """
@@ -13,10 +12,11 @@ import json
 from datetime import datetime, timedelta
 import subprocess
 import logging
+import platform
+import requests
 
 # Set proxy environment variables at module import time
-os.environ["no_proxy"] = ""
-os.environ["NO_PROXY"] = ""
+
 
 # Configure logging
 logging.basicConfig(
@@ -33,9 +33,93 @@ _api_key_cache = {
 }
 
 def generate_new_api_key():
-    """
-    Generate a new OpenAI API key using Intel's internal API.
+    os.environ["no_proxy"] = "http://proxy-dmz.intel.com:912"
+    os.environ["NO_PROXY"] = "http://proxy-dmz.intel.com:912"
+    if platform.system().lower() == 'windows':
+        # call generate_new_api_key function for windows
+        return generate_new_api_key_windows()
+    elif platform.system().lower() == 'linux':
+        # call generate_new_api_key function for windows
+        return generate_new_api_key_linux()
+    else:
+        #platform is not supported.
+        logger.error(f"Failed to generate new API key: The platform '{platform.system().lower()}' isn't supported.")
+        return None
 
+def generate_new_api_key_windows():
+    """
+    Generate a new OpenAI API key using Intel's internal API for windows.
+
+    Returns:
+        str: A new OpenAI API key
+    """
+    logger.info("Generating new OpenAI API key via Intel API...")
+
+    if not requests:
+        logger.error("requests library is not available. Please install it with: pip install requests")
+        return None
+
+    try:
+        # Prepare the request data
+        url = "https://apis-internal.intel.com/v1/auth/token"
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": "4ef1b24a-d699-4118-b1ff-4d0428932883",
+            "client_secret": "jgK8Q~Z56BnoZN8n2t9VBt5L_6T7HFd.RyIJdaJm"
+        }
+
+        proxies = {
+            'no_proxy': "",
+            'NO_PROXY': ""
+        }
+
+        # Make the POST request
+        logger.debug("Making POST request to Intel API...")
+        response = requests.post(url, headers=headers, data=data, proxies=proxies, timeout=30)
+
+        # Check if request was successful
+        if response.status_code != 200:
+            logger.error(f"API request failed with status code: {response.status_code}")
+            logger.debug(f"Response content: {response.text[:100]}...")
+            return None
+
+        # Parse the response to extract the access token
+        try:
+            response_json = response.json()
+            new_key = response_json.get('access_token')
+
+            if not new_key:
+                logger.error("Access token not found in API response")
+                logger.debug(f"API Response: {str(response_json)[:100]}...")  # Log first 100 chars only for security
+                return None
+
+            logger.info("Successfully generated new API key")
+            return new_key
+
+        except json.JSONDecodeError:
+            logger.error("Failed to parse JSON response from API")
+            logger.debug(f"Raw response: {response.text[:100]}...")  # Log first 100 chars only for security
+            return None
+
+    except requests.exceptions.Timeout:
+        logger.error("Request timed out while connecting to Intel API")
+        return None
+    except requests.exceptions.ConnectionError:
+        logger.error("Failed to connect to Intel API - check your network connection")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request failed: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to generate new API key: {str(e)}")
+        return None
+
+def generate_new_api_key_linux():
+    """
+    Generate a new OpenAI API key using Intel's internal API for linux.
     Returns:
         str: A new OpenAI API key
     """
@@ -82,10 +166,8 @@ def generate_new_api_key():
 def is_key_valid(api_key):
     """
     Check if the API key is valid by making a test request to OpenAI.
-
     Args:
         api_key (str): The OpenAI API key to validate
-
     Returns:
         bool: True if the key is valid, False otherwise
     """
@@ -98,11 +180,9 @@ def is_key_valid(api_key):
 def get_openai_api_key(force_new=True, key_lifetime_minutes=60):
     """
     Get a valid OpenAI API key, either from cache or by generating a new one.
-
     Args:
         force_new (bool): If True, ignores cached key and generates a new one
         key_lifetime_minutes (int): How long (in minutes) a key should be considered valid
-
     Returns:
         str: A valid OpenAI API key
     """
@@ -172,4 +252,3 @@ def clear_api_key_cache():
 #         if not api_key:
 #             raise ValueError("Failed to obtain a valid OpenAI API key")
 #         return func(*args, **kwargs)
-#     return wrapper
