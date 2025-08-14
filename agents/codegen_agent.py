@@ -696,7 +696,9 @@ class MultiAgentTestOrchestrator:
         important_keywords = [
             'APPROVED FOR EXECUTION', 'CODE IS READY FOR EXECUTION', 'APPROVE THIS CODE FOR TESTING',
             'FAILED:', 'SUCCESS:', 'ERROR:', 'filename:', 'def test_', 'import pytest',
-            'subprocess.run', 'if __name__ == "__main__":', 'Exit code:', 'Test execution'
+            'subprocess.run', 'if __name__ == "__main__":', 'Exit code:', 'Test execution',
+            '#include ', 'TEST(', 'TEST_F(', 'CU_ASSERT(', 'CU_ADD_TEST(', 'global _?main',
+            'section .text', 'mov ', 'assert.h', 'CUnit/CUnit.h', 'main'
         ]
 
         for msg in self.group_chat.messages[1:]:
@@ -705,7 +707,7 @@ class MultiAgentTestOrchestrator:
             if any(keyword in content for keyword in important_keywords):
                 important_messages.append(msg)
             # Also keep messages with code blocks
-            elif '```python' in content or '```bash' in content:
+            elif any(code_block in content for code_block in ['```python', '```cpp', '```c', '```asm', '```bash']):
                 important_messages.append(msg)
 
         # Keep most recent messages (last 8-10 messages are usually most relevant)
