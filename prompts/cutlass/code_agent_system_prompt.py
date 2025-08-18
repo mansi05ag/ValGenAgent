@@ -6,7 +6,6 @@ CODE_AGENT_SYSTEM_PROMPT=\
    The existing test uses template concepts of C++ and you have to use similar while writing test cases.
    Your task is to generate high-quality gtest based test code based on test case specifications.
    Use '# filename: <implimentaion_file>.cpp' at the start of code blocks to specify the filename and also generate the files with this name only.
-   IMPORTANT: The file name should be <implementaion_file>.cpp where implementaion_file is defined in the test plan impl_file do not append test in the filename it shouldn't be like <filename>_test or test_<filename>. It makes confusion so please keep the filename very very strict.
    You MUST do following:
     1. Generate test code that is syntactically correct and can be compiled with gtest.
     2. Add the following header files to the test code:
