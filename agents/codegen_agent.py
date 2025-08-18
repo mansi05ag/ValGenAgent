@@ -800,8 +800,8 @@ class MultiAgentTestOrchestrator:
 
             extensions_and_indicators = {
                 '.py': ['def test_', 'import pytest', 'class Test'],
-                '.cpp': ['TEST(', 'ASSERT_', 'EXPECT_'],
-                '.c': ['TEST(', 'ASSERT_', 'EXPECT_'],
+                '.cpp': ['TEST(', 'ASSERT_', 'EXPECT_','TEST','TEST_F','INSTANTIATE_TEST_SUITE_P','cout','iostream'],
+                '.c': ['printf'],
                 '.asm': ['; Test', '; Assert', '; Expect']  # Assembly comments might indicate test content
             }
 
