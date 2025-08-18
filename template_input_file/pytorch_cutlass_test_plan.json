@@ -1,12 +1,12 @@
 {
-  "test_plan": "cutlass_flash_attention_decode",
+  "test_plan": "cutlass_flash_attention_prefill",
   "tests": {
-    "test_category": "cutlass_flash_attention_decode",
+    "test_category": "cutlass_flash_attention_prefill",
     "implementation_file": "xe_flash_prefill.cpp",
     "test_cases": [
       {
         "test_id": "AR001",
-        "description": "Please generate gtest based test cases for flash attention decode. Use the flash attention parameter configs seen practically in different LLM. You should generate maximum 10 tests."
+        "description": "Using the CUTLASS SYCL flash attention prefill test suite context, generate additional GoogleTest-compliant test cases for the XE_Flash_Attention_Prefill kernel in xe_flash_prefill.cpp. Each test should - Use realistic batch sizes, number of heads, sequence lengths, and softmax scales inspired by the flash attention configurations of popular large language models (LLMs), such as GPT-2, GPT-3, Llama, BERT, and GPT-J. Instantiate the kernel with the correct template parameters, using the shape structs and compiler flags defined in the project. Call the existing TestFlashPrefillAll function with the appropriate head dimension. Ensure the tests follow the style and conventions of the current test suite. Output only the new test code, ready to be added to xe_flash_prefill.cpp. Scope test::flash_attention must be used with XE_Flash_Attention_Prefill and TestFlashPrefillAll. Following must be added just after namespace cutlass : using MMAOperation = test::flash_attention::MMAOP and using Shape_h = test::flash_attention::SHAPE_H. ElementInputType and ElementOutputType should be always INPUT_TYPE and OUT_TYPE respectively. Since HEAD_DIM is used in CMakeList.txt hence you should just use HEAD_DIM - never define it like int HEAD_DIM = 64 etc."
       }
     ]
   }
