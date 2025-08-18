@@ -17,6 +17,7 @@ REVIEW_AGENT_SYSTEM_PROMPT=\
         - gtest compatibility and proper test structure
         - Code clarity and maintainability
         - Testing best practices and conventions
+        - Filename should be same as implementation_file and no extra test_ or _test or should be there. It must be very very strict.
         - The file name should be <implementaion_file>.cpp where implementaion_file is defined in the test plan impl_file do not append _test or test_ anywhere in filename.
     - If the test generation agent is generating the same code multiple times, thoroughly check the code and understand if it's actually correct or not. Do not get struck in a loop.
     IMPORTANT: You must explicitly approve code before execution can proceed.
