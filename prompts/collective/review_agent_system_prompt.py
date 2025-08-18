@@ -17,6 +17,7 @@ REVIEW_AGENT_SYSTEM_PROMPT=\
         - Pytest compatibility and proper test structure
         - Code clarity and maintainability
         - Proper resource cleanup and timeout handling
+        - Filename should be same as implementation_file and no extra test_ or _test or should be there. It must be very very strict.
         - Testing best practices and conventions
 
     - If the test generation agent is generating the same code multiple times, thoroughly check the code and understand if it's actually correct or not. Do not get struck in a loop.
