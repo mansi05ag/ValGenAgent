@@ -453,22 +453,22 @@ def main() -> None:
             python test_runner.py --test-plan path/to/plan.json --output-dir path/to/output_dir --execute-tests=false
         """
     )
-    parser.add_argument('--output-dir', default='test_results', help='Output directory for all artifacts')
-    parser.add_argument('--test-plan', help='Path to existing test plan (optional)')
-    parser.add_argument('--feature-input-file', help='Path to feature input JSON file containing name and description fields')
+    parser.add_argument('--output_dir', default='test_results', help='Output directory for all artifacts')
+    parser.add_argument('--test_plan', help='Path to existing test plan (optional)')
+    parser.add_argument('--feature_input_file', help='Path to feature input JSON file containing name and description fields')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
-    parser.add_argument('--code-dir', default='./code', help='Path to the code directory for RAG.')
+    parser.add_argument('--code_dir', default='./code', help='Path to the code directory for RAG.')
     parser.add_argument('--remove_index_db', action='store_true', help='deletes the already created index db for RAG')
 
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
-    step_group.add_argument('--generate-plan-only', action='store_true',
+    step_group.add_argument('--generate_plan_only', action='store_true',
                            help='Only generate test plan, skip test automation')
-    step_group.add_argument('--test-automation-only', action='store_true',
+    step_group.add_argument('--test_automation_only', action='store_true',
                            help='Only run test automation, skip test plan generation')
 
     # Test execution control
-    parser.add_argument('--execute-tests', type=lambda x: x.lower() in ('true', '1', 'yes'), default=True,
+    parser.add_argument('--execute_tests', type=lambda x: x.lower() in ('true', '1', 'yes'), default=True,
                         help='Execute generated tests (default: True). Set it to false to only generate tests without execution.')
 
     parser.add_argument('--prompt_for', type=str, required=True,
