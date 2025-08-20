@@ -1,7 +1,7 @@
 {
   "test_plan": "cutlass_flash_attention_prefill",
   "tests": {
-    "test_category": "cutlass_flash_attention_prefill",
+    "test_category": "cutlass_flash_attention_prefill xe_flash_prefill.cpp flash_prefill_testbed_3x.hpp",
     "implementation_file": "xe_flash_prefill.cpp",
     "test_cases": [
       {
