@@ -106,34 +106,41 @@ class KnowledgeBase:
 
         nodes = []
         for doc in docs:
-            if doc.metadata.get("file_name", "").endswith(".py"):
-                parser = CodeHierarchyNodeParser(
-                    language="python",
-                    code_splitter=CodeSplitter(language="python", chunk_lines=1000, max_chars=2000)
-                )
-            elif doc.metadata.get("file_name", "").endswith(".cpp"):
-                parser = CodeHierarchyNodeParser(
-                    language="cpp",
-                    code_splitter=CodeSplitter(language="cpp", chunk_lines=30, max_chars=2000)
-                )
-            elif doc.metadata.get("file_name", "").endswith(".c"):
-                parser = CodeHierarchyNodeParser(
-                    language="c",
-                    code_splitter=CodeSplitter(language="c", chunk_lines=30, max_chars=2000)
-                )
-            elif doc.metadata.get("file_name", "").endswith(".asm"):
-                parser = CodeHierarchyNodeParser(
-                    language="asm",
-                    code_splitter=CodeSplitter(language="asm", chunk_lines=20, max_chars=2000)
-                )
-            else:
-                # Fallback to hierarchical parser for other types
-                # This will handle text, markdown, html, etc.
-                # It will also handle code files that are not specifically parsed above
-                # by splitting them into smaller nodes based on content length.
-                parser = doc_parser
+            try:
+                if "\t" in doc.text:
+                    doc.set_content(doc.text.replace("\t", "    "))
 
-            nodes += parser.get_nodes_from_documents([doc])
+                file_name = doc.metadata.get("file_name", "")
+
+                if file_name.endswith(".py"):
+                    parser = CodeHierarchyNodeParser(
+                        language="python",
+                        code_splitter=CodeSplitter(language="python", chunk_lines=1000, max_chars=2000)
+                    )
+                elif file_name.endswith(".cpp"):
+                    parser = CodeHierarchyNodeParser(
+                        language="cpp",
+                        code_splitter=CodeSplitter(language="cpp", chunk_lines=30, max_chars=2000)
+                    )
+                elif file_name.endswith(".c"):
+                    parser = CodeHierarchyNodeParser(
+                        language="c",
+                        code_splitter=CodeSplitter(language="c", chunk_lines=30, max_chars=2000)
+                    )
+                elif file_name.endswith(".asm"):
+                    parser = CodeHierarchyNodeParser(
+                        language="asm",
+                        code_splitter=CodeSplitter(language="asm", chunk_lines=20, max_chars=2000)
+                    )
+                else:
+                    parser = doc_parser  # fallback parser
+
+                nodes += parser.get_nodes_from_documents([doc])
+
+            except Exception as e:
+                failed_docs.append({"file": file_name, "error": str(e)})
+                # optionally log
+                print(f"Failed to parse {file_name}: {e}")
 
         # Replace None relationships with empty lists -> The CodeHierarchyNodeParser if there is no next or previous relationships sets it to none but expected to be empty list.(seeing error without this)
         for node in nodes:

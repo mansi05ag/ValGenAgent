@@ -51,6 +51,7 @@ class TestWorkflowRunner:
     """Manages the end-to-end test workflow"""
 
     def __init__(self, output_dir: str,
+                 build: bool,
                  verbose: bool = False,
                  test_plan_file: Optional[str] = None,
                  feature_input_file: Optional[str] = None,
@@ -59,7 +60,10 @@ class TestWorkflowRunner:
                  run_automation: bool = True,
                  code_agent_prompt: Optional[str] = None,
                  review_agent_prompt: Optional[str] = None,
-                 test_coordinator_prompt: Optional[str] = None):
+                 test_coordinator_prompt: Optional[str] = None,
+                 execute_dir: Optional[str] = '',
+                 build_file: Optional[str] ='',
+                 build_dir: Optional[str] =''):
         self.output_dir = Path(output_dir)
         self.verbose = verbose
         self.test_plan_file = test_plan_file
@@ -70,6 +74,10 @@ class TestWorkflowRunner:
         self.code_agent_prompt = code_agent_prompt
         self.review_agent_prompt = review_agent_prompt
         self.test_coordinator_prompt = test_coordinator_prompt
+        self.build=build
+        self.execute_dir=execute_dir
+        self.build_file=build_file
+        self.build_dir=build_dir
 
         # Static input directory for documents and URLs
         self.input_dirs_path = Path("input_dirs")
@@ -219,8 +227,8 @@ class TestWorkflowRunner:
         """Run test automation agent to generate and execute tests."""
         print("Initializing test automation...")
         try:
-            output_dir = str(self.output_dir / "generated_tests")
-
+            # output_dir = str(self.output_dir / "generated_tests")
+            output_dir = str(self.output_dir )
             print("Generating test code...")
             # Call the function directly instead of subprocess
             success = run_test_automation(
@@ -233,6 +241,10 @@ class TestWorkflowRunner:
                 code_agent_prompt=self.code_agent_prompt,
                 review_agent_prompt=self.review_agent_prompt,
                 test_coordinator_prompt=self.test_coordinator_prompt,
+                build=self.build,
+                execute_dir=self.execute_dir,
+                build_dir=self.build_dir,
+                build_file=self.build_file
             )
 
             if not success:
@@ -458,8 +470,11 @@ def main() -> None:
     parser.add_argument('--feature_input_file', help='Path to feature input JSON file containing name and description fields')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code_dir', default='./code', help='Path to the code directory for RAG.')
+    parser.add_argument('--execute_dir', help='Path to execute directory')
+    parser.add_argument('--build_file', help='build file argument to build the executables using-> ninja <build_file>')
+    parser.add_argument('--build_dir', help='build directory argument to build the executables at the build folder')
     parser.add_argument('--remove_index_db', action='store_true', help='deletes the already created index db for RAG')
-
+    parser.add_argument('--build', action='store_true', help='runs ninja build and builds the executables')
     # Step control arguments
     step_group = parser.add_mutually_exclusive_group()
     step_group.add_argument('--generate_plan_only', action='store_true',
@@ -511,7 +526,10 @@ def main() -> None:
             print(f"Deleted the directory: {index_db_dir}")
         else:
             print(f"The directory {index_db_dir} does not exist.")
-
+    Build=False
+    if args.build:
+        Build=True
+    # import pdb;pdb.set_trace()
     runner = TestWorkflowRunner(
         output_dir=args.output_dir,
         verbose=args.verbose,
@@ -521,7 +539,11 @@ def main() -> None:
         feature_input_file=args.feature_input_file,
         code_agent_prompt=code_agent_prompt.CODE_AGENT_SYSTEM_PROMPT,
         review_agent_prompt=review_agent_prompt.REVIEW_AGENT_SYSTEM_PROMPT,
-        test_coordinator_prompt=test_coordinator_prompt.TEST_COORDINATOR_AGENT_SYSTEM_PROMPT
+        test_coordinator_prompt=test_coordinator_prompt.TEST_COORDINATOR_AGENT_SYSTEM_PROMPT,
+        build=Build,
+        execute_dir=args.execute_dir,
+        build_file=args.build_file,
+        build_dir=args.build_dir,
     )
 
     success = runner.run(execute_tests=args.execute_tests)
