@@ -1,0 +1,13 @@
+{
+  "test_plan": "cutlass_flash_attention_prefill_cachedkv",
+  "tests": {
+    "test_category": "cutlass_flash_attention_prefill_cachedkv",
+    "implementation_file": "xe_flash_prefill_cachedkv_{dtype}_{compute}_{output}_{head_size}.cpp",
+    "test_cases": [
+      {
+        "test_id": "REQ_001",
+        "description": "Generate a CUTLASS SYCL flash attention test file with the following specifications:\n\n**Test Type**: prefill_cachedkv\n\n**Parameters**:\n- **Data Type**: bf16, fp32\n- **Compute Type**: fp32\n- **Output Type**: fp32\n- **Head Size**: 64, 96, 128, 192\n\n**Test Variants Required**: causal, noncausal, varlen_causal, varlen_noncausal\n\n**Generation Requirements**:\n- Follow existing patterns from reference implementations exactly\n- Use appropriate includes\n- Maintain exact template parameter structure\n- Implement GoogleTest-compliant test cases\n- Ensure CMake compatibility with existing build system\n- Use proper namespace declarations and type mappings\n- For prefill tests: Use preprocessor macros INPUT_TYPE, OUT_TYPE, HEAD_DIM, TEST_NAME\n- For decode/cachedkv tests: Use explicit template instantiation\n- Follow exact file naming conventions\n- Include all required test variants (causal, noncausal, varlen_causal, varlen_noncausal)\n- Use EXPECT_TRUE assertions with appropriate TestFlash prefill_cachedkv All function calls\n- Maintain consistent code formatting and structure. Always include #include flash_prefill_cachedkv_testbed_3x.hpp and namespace cutlass { in outputfile. Use aliasing of Shape_h whenever needed.\n\n While generating tests always include configs from popular LLMs like: Llama-3, Llama-4, Mistral, Falcon, GPT-3.5, GPT4, GPT-4 Turbo, Claude 2, Claude 3, Gemini Pro, Gemini 1.5 Pro, and Mixtral, DeepSeek R1, DeepSeek R2, and Qwen-2. etc. Also, add model name in comment for each config"
+      }
+    ]
+  }
+}
