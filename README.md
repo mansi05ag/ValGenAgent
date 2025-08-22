@@ -164,6 +164,8 @@ python test_runner.py --test_plan path/to/plan.json --output_dir path/to/output_
 # build executables and execute them for cpp using cmake
 python test_runner.py --feature_input input_file/collective_feature.json --output_dir test_results --execute_python_tests=false --prompt_for cutlass --build --build_dir path/to/build_dir --build_target cmake_build_target --execute_dir path/to/executables 
 
+#example command
+python test_runner.py --test_plan template_input_file/cutlass_cashedkv.json --output_dir cutlass-sycl/test/unit/flash_attention/flash_attention_prefill_cachedkv --prompt_for cutlass --execute_python_tests=false --build_target cutlass_test_unit_flash_attention_prefill_cachedkv_ai --execute_dir cutlass-sycl/build/test/unit/flash_attention/flash_attention_prefill_cachedkv --build_dir cutlass-sycl/build --build
 ```
 
 ---
