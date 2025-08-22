@@ -50,21 +50,19 @@ class TestResult:
 class TestWorkflowRunner:
     """Manages the end-to-end test workflow"""
 
-    def __init__(self, output_dir: str,
-                 verbose: bool = False,
-                 test_plan_file: Optional[str] = None,
-                 feature_input_file: Optional[str] = None,
+    def __init__(self, args,
                  api_key = None,
                  generate_plan: bool = True,
                  run_automation: bool = True,
                  code_agent_prompt: Optional[str] = None,
                  review_agent_prompt: Optional[str] = None,
                  test_coordinator_prompt: Optional[str] = None):
-        self.output_dir = Path(output_dir)
-        self.verbose = verbose
-        self.test_plan_file = test_plan_file
+        self.args = args
+        self.output_dir = Path(args.output_dir)
+        self.verbose = args.verbose
+        self.test_plan_file = args.test_plan
         self.api_key = api_key or get_openai_api_key()
-        self.feature_input_file = feature_input_file
+        self.feature_input_file = args.feature_input_file
         self.generate_plan = generate_plan
         self.run_automation = run_automation
         self.code_agent_prompt = code_agent_prompt
@@ -79,8 +77,8 @@ class TestWorkflowRunner:
 
         # Initialize document processor
         self.doc_processor = DocumentProcessor(
+            self.args,
             api_key=self.api_key,
-            verbose=self.verbose
         )
 
         # Create output directory
@@ -188,10 +186,10 @@ class TestWorkflowRunner:
             plan_start = time.time()
 
             success = generate_test_plan_files(
+                self.args,
                 output_file=str(test_plan_file),
                 json_file=str(test_plan_json),
                 feature_info_file=str(feature_info_path),
-                verbose=self.verbose
             )
 
             plan_time = time.time() - plan_start
@@ -224,11 +222,11 @@ class TestWorkflowRunner:
             print("Generating test code...")
             # Call the function directly instead of subprocess
             success = run_test_automation(
+                self.args,
                 test_plan_path=test_plan_file,
                 output_dir=output_dir,
                 max_retries=2,  # default value
                 max_context=25,  # default value
-                verbose=self.verbose,
                 execute_tests=execute_tests,
                 code_agent_prompt=self.code_agent_prompt,
                 review_agent_prompt=self.review_agent_prompt,
@@ -513,12 +511,9 @@ def main() -> None:
             print(f"The directory {index_db_dir} does not exist.")
 
     runner = TestWorkflowRunner(
-        output_dir=args.output_dir,
-        verbose=args.verbose,
-        test_plan_file=args.test_plan,
+        args=args,
         generate_plan=generate_plan,
         run_automation=run_automation,
-        feature_input_file=args.feature_input_file,
         code_agent_prompt=code_agent_prompt.CODE_AGENT_SYSTEM_PROMPT,
         review_agent_prompt=review_agent_prompt.REVIEW_AGENT_SYSTEM_PROMPT,
         test_coordinator_prompt=test_coordinator_prompt.TEST_COORDINATOR_AGENT_SYSTEM_PROMPT

@@ -15,15 +15,15 @@ from prompts.collective.test_plan_generation_system_prompt import TEST_PLAN_SYST
 # Load environment variables
 load_dotenv()
 
-def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dict] = None, verbose: bool = False) -> tuple[bool, Dict[str, Any], str]:
+def generate_test_plan(args, api_key: Optional[str] = None, feature_info: Optional[Dict] = None) -> tuple[bool, Dict[str, Any], str]:
     """
     Generate a test plan for a specified feature in JSON format.
 
     Args:
+        args: arguments needed to be processes.
         feature_name (str): The name of the feature to create a test plan for
         api_key (str): Not used for Gemini
         feature_info (dict): Optional feature information to enhance the prompt
-        verbose (bool): Whether to print verbose output
 
     Returns:
         tuple: (success: bool, test_plan: Dict[str, Any], raw_response: str)
@@ -67,7 +67,7 @@ def generate_test_plan(api_key: Optional[str] = None, feature_info: Optional[Dic
                 print(f"Error generating test plan in json format: {str(e)}")
                 return False, {}, ""
 
-            if verbose:
+            if args.verbose:
                 print("Successfully generated test plan")
 
             return True, test_plan, response_text
@@ -183,15 +183,15 @@ def create_test_plan_document(test_plan: Dict[str, Any], output_file: str, featu
         traceback.print_exc()
         return False
 
-def generate_test_plan_files(output_file: str, json_file: str, feature_info_file: Optional[str] = None, verbose: bool = False) -> bool:
+def generate_test_plan_files(args, output_file: str, json_file: str, feature_info_file: Optional[str] = None) -> bool:
     """
     Generate test plan files (both DOCX and JSON) from feature information.
 
     Args:
+        args: the arguments passed by user
         output_file: Path for the DOCX output file
         json_file: Path for the JSON output file
         feature_info_file: Optional path to feature info JSON file
-        verbose: Enable verbose output
 
     Returns:
         bool: True if successful, False otherwise
@@ -209,8 +209,8 @@ def generate_test_plan_files(output_file: str, json_file: str, feature_info_file
 
         # Generate test plan
         success, test_plan, raw_response = generate_test_plan(
+            args=args,
             feature_info=feature_info,
-            verbose=verbose
         )
 
         if not success:
@@ -230,7 +230,7 @@ def generate_test_plan_files(output_file: str, json_file: str, feature_info_file
             print("Failed to create Word document")
             return False
 
-        if verbose:
+        if args.verbose:
             print(f"Test plan saved to: {output_file}")
             print(f"JSON test plan saved to: {json_file}")
 
