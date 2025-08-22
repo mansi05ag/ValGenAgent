@@ -334,13 +334,14 @@ class ContextManagedGroupChat(autogen.GroupChat):
             self.logger.log("GroupChat", f"Context auto-managed: reduced to {len(self.messages)} messages")
 
 class MultiAgentTestOrchestrator:
-    def __init__(self, output_dir: str,
+    def __init__(self, args, output_dir: str,
                  max_retries: int = 2,
                  max_context_messages: int = 25,
                  execute_tests: bool = True,
                  code_agent_prompt: str = "",
                  review_agent_prompt: str = "",
                  test_coordinator_prompt: str = ""):
+        self.args=args
         self.output_dir = output_dir
         self.max_retries = max_retries
         self.max_context_messages = max_context_messages
@@ -906,11 +907,10 @@ class MultiAgentTestOrchestrator:
             print("Warning: Cannot build knowledge base - dependencies not available")
             return False
 
-def run_test_automation(test_plan_path: str,
+def run_test_automation(args, test_plan_path: str,
                         output_dir: str = "generated_tests",
                        max_retries: int = 20,
                        max_context: int = 25,
-                       verbose: bool = False,
                        execute_tests: bool = True,
                        code_agent_prompt: str = "",
                        review_agent_prompt: str = "",
@@ -919,11 +919,11 @@ def run_test_automation(test_plan_path: str,
     Run the multi-agent test automation system.
 
     Args:
+        args: arguments passed by user
         test_plan_path: Path to test plan document (JSON or DOCX format)
         output_dir: Output directory for generated tests
         max_retries: Maximum retries for code correction
         max_context: Maximum context messages in GroupChat
-        verbose: Enable verbose output
         execute_tests: Whether to execute the generated tests
 
     Returns:
@@ -939,7 +939,7 @@ def run_test_automation(test_plan_path: str,
             print("ERROR: Test plan must be a JSON or DOCX file")
             return False
 
-        if verbose:
+        if args.verbose:
             print("Multi-Agent Test Automation System")
             print("=" * 40)
             print(f"Test Plan: {test_plan_path}")
@@ -951,6 +951,7 @@ def run_test_automation(test_plan_path: str,
 
         # Initialize and run the multi-agent orchestrator
         orchestrator = MultiAgentTestOrchestrator(
+            args=args,
             output_dir=output_dir,
             max_retries=max_retries,
             max_context_messages=max_context,
@@ -963,7 +964,7 @@ def run_test_automation(test_plan_path: str,
         success = orchestrator.orchestrate_test_generation(test_plan_path)
 
         if success:
-            if verbose:
+            if args.verbose:
                 print("\n" + "="*50)
                 print("COMPLETE SUCCESS: All expected test files generated!")
                 print(f"Generated tests are available in: {output_dir}")
@@ -971,7 +972,7 @@ def run_test_automation(test_plan_path: str,
             else:
                 print("\nSUCCESS: All expected test files generated successfully!")
         else:
-            if verbose:
+            if args.verbose:
                 print("\n" + "="*50)
                 print("FAILURE: Not all expected test files were generated!")
                 print("Check the logs above for details on which files failed.")

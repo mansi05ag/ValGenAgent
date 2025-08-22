@@ -55,18 +55,18 @@ class DocumentProcessor:
     MAX_CONTEXT_TOKENS = 120000  # GPT-4o has 128k context window
     SAFE_CONTEXT_TOKENS = 100000  # Use 100k to leave buffer for responses
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, verbose: bool = False):
+    def __init__(self, args, api_key: Optional[str] = None, base_url: Optional[str] = None):
         """
         Initialize the document processor.
 
         Args:
+            args: user provied arguments
             api_key: OpenAI API key
             base_url: Custom base URL for OpenAI API
-            verbose: Enable verbose logging
         """
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.base_url = base_url or "https://apis-internal.intel.com/generativeaiinference/v4"
-        self.verbose = verbose
+        self.verbose = args.verbose
 
         # Initialize OpenAI client
         if self.api_key:
