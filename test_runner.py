@@ -62,7 +62,7 @@ class TestWorkflowRunner:
                  review_agent_prompt: Optional[str] = None,
                  test_coordinator_prompt: Optional[str] = None,
                  execute_dir: Optional[str] = '',
-                 build_file: Optional[str] ='',
+                 build_target: Optional[str] ='',
                  build_dir: Optional[str] =''):
         self.output_dir = Path(output_dir)
         self.verbose = verbose
@@ -76,7 +76,7 @@ class TestWorkflowRunner:
         self.test_coordinator_prompt = test_coordinator_prompt
         self.build=build
         self.execute_dir=execute_dir
-        self.build_file=build_file
+        self.build_target=build_target
         self.build_dir=build_dir
 
         # Static input directory for documents and URLs
@@ -244,7 +244,7 @@ class TestWorkflowRunner:
                 build=self.build,
                 execute_dir=self.execute_dir,
                 build_dir=self.build_dir,
-                build_file=self.build_file
+                build_target=self.build_target
             )
 
             if not success:
@@ -471,7 +471,7 @@ def main() -> None:
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--code_dir', default='./code', help='Path to the code directory for RAG.')
     parser.add_argument('--execute_dir', help='Path to execute directory')
-    parser.add_argument('--build_file', help='build file argument to build the executables using-> ninja <build_file>')
+    parser.add_argument('--build_target', help='build file argument to build the executables using-> ninja <build_target>')
     parser.add_argument('--build_dir', help='build directory argument to build the executables at the build folder')
     parser.add_argument('--remove_index_db', action='store_true', help='deletes the already created index db for RAG')
     parser.add_argument('--build', action='store_true', help='runs ninja build and builds the executables')
@@ -483,7 +483,7 @@ def main() -> None:
                            help='Only run test automation, skip test plan generation')
 
     # Test execution control
-    parser.add_argument('--execute_tests', type=lambda x: x.lower() in ('true', '1', 'yes'), default=True,
+    parser.add_argument('--execute_python_tests', type=lambda x: x.lower() in ('true', '1', 'yes'), default=True,
                         help='Execute generated tests (default: True). Set it to false to only generate tests without execution.')
 
     parser.add_argument('--prompt_for', type=str, required=True,
@@ -514,7 +514,7 @@ def main() -> None:
     else:
         # Default mode: generate plan (if needed) + test automation
         # The execute_tests flag will control whether tests are actually executed
-        if args.execute_tests:
+        if args.execute_python_tests:
             print("Mode: Complete workflow (generate plan + test automation + execution)")
         else:
             print("Mode: Generate tests only (skip execution)")
@@ -542,11 +542,11 @@ def main() -> None:
         test_coordinator_prompt=test_coordinator_prompt.TEST_COORDINATOR_AGENT_SYSTEM_PROMPT,
         build=Build,
         execute_dir=args.execute_dir,
-        build_file=args.build_file,
+        build_target=args.build_target,
         build_dir=args.build_dir,
     )
 
-    success = runner.run(execute_tests=args.execute_tests)
+    success = runner.run(execute_tests=args.execute_python_tests)
     sys.exit(0 if success else 1)
 
 if __name__ == '__main__':

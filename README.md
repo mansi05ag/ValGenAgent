@@ -141,7 +141,7 @@ Please refer feature_description/collective_feature.json
 ###  Run the Agent
 
 ```bash
-python test_runner.py --feature_input <path_to_input_file> --output_dir test_results
+python test_runner.py --feature_input <path_to_input_file> --output_dir test_results --prompt_for collectives
 ```
 
 ---
@@ -150,13 +150,20 @@ python test_runner.py --feature_input <path_to_input_file> --output_dir test_res
 
 ```bash
 # Just generate test cases - don't run them
-python test_runner.py --feature_input input_file/collective_feature.json --output_dir test_results --execute_tests=false
+python test_runner.py --feature_input input_file/collective_feature.json --output_dir test_results --execute_python_tests=false --prompt_for cutlass
 
 # Generate just the test plan based on the input file
-python test_runner.py --feature_input input_file/collective_feature.json --generate_plan-only --output-dir test_results
+python test_runner.py --feature_input input_file/collective_feature.json --generate_plan-only --output-dir test_results --prompt_for cutlass
 
 # just generate tests based on user provided test plan
-python test_runner.py --test_plan path/to/plan.json --output_dir path/to/output_dir --execute-tests=false
+python test_runner.py --test_plan path/to/plan.json --output_dir path/to/output_dir --execute-tests=false --prompt_for cutlass
+```
+
+### Running the agent with cpp execution[cutlass]
+```bash
+# build executables and execute them for cpp using cmake
+python test_runner.py --feature_input input_file/collective_feature.json --output_dir test_results --execute_python_tests=false --prompt_for cutlass --build --build_dir path/to/build_dir --build_target cmake_build_target --execute_dir path/to/executables 
+
 ```
 
 ---

@@ -272,14 +272,14 @@ def overwrite_file(filepath: str, code: str) -> str:
         return f" Failed to write file {filepath}: {e}"
 
 
-def run_build(build_dir: str, log_dir: str, summarizer_agent,build_file) -> tuple[bool, list[str]]:
+def run_build(build_dir: str, log_dir: str, summarizer_agent,build_target) -> tuple[bool, list[str]]:
     """Run Ninja build, save log, return (success, messages)."""
     msgs = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(log_dir, f"build_log_{timestamp}.txt")
 
     try:
-        build_cmd = ["ninja", f"{build_file}"]
+        build_cmd = ["ninja", f"{build_target}"]
         msgs.append(f"⚙️ Running build: {' '.join(build_cmd)} in {build_dir}")
 
         build_proc = subprocess.run(
@@ -376,58 +376,59 @@ def run_executables(executables: list[str], log_dir: str) -> list[str]:
 
 
 
-def save_code_to_file(code: str, filename: str, directory: str,build: bool, execute_dir: str, build_file: str, build_dir: str) -> str:
+def build_code_to_file(code: str, filename: str, directory: str,build: bool, execute_dir: str, build_target: str, build_dir: str) -> str:
     """
     Overwrite test file, build, and run executables if build succeeds.
     """
-    if build:
-        filepath = os.path.join(directory, filename)
-        os.makedirs(build_dir, exist_ok=True)
-        os.makedirs(directory, exist_ok=True)
+    filepath = os.path.join(directory, filename)
+    os.makedirs(build_dir, exist_ok=True)
+    os.makedirs(directory, exist_ok=True)
 
-        msgs = []
+    msgs = []
 
-        # Step 1: Overwrite file
-        msgs.append(overwrite_file(filepath, code))
+    # Step 1: Overwrite file
+    msgs.append(overwrite_file(filepath, code))
 
-        # Step 2: Init summarizer agent
-        summarizer_agent = autogen.ConversableAgent(
-            name="BuildLogSummarizer",
-            system_message="""
-            You are a **Build Log Summarizer Agent**.
-            Your job is to:
-            - Summarize the build log concisely.
-            - Highlight the **errors, compiler diagnostics, and failed tests** clearly.
-            - Give function names and variables related to errors.
-            - Provide debug-ready insights, with 100 lines from start, 100 lines around errors, 100 lines from end. Don't miss any errors at all.
-            - If no errors exist, confirm build success.
-            """,
-            llm_config=llm_config,
-        )
+    # Step 2: Init summarizer agent
+    summarizer_agent = autogen.ConversableAgent(
+        name="BuildLogSummarizer",
+        system_message="""
+        You are a **Build Log Summarizer Agent**.
+        Your job is to:
+        - Summarize the build log concisely.
+        - Highlight the **errors, compiler diagnostics, and failed tests** clearly.
+        - Give function names and variables related to errors.
+        - <IMPORTANT> Provide debug-ready insights, with 100 lines from start, 100 lines around errors, 100 lines from end. Don't miss any errors at all.
+        - If no errors exist, confirm build success.
+        """,
+        llm_config=llm_config,
+    )
 
-        # Step 3: Run build
-        success, build_msgs = run_build(build_dir, directory, summarizer_agent,build_file)
-        msgs.extend(build_msgs)
-        # Step 4: Only run executables if build succeeded
-        if success:
-            executables = find_executables(execute_dir)
-            if not executables:
-                msgs.append(f" No executables found in {execute_dir}")
-            else:
-                msgs.append(f" Found executables: {executables}")
-                exe_msgs = run_executables(executables, execute_dir)
-                msgs.extend(exe_msgs)
+    # Step 3: Run build
+    success, build_msgs = run_build(build_dir, directory, summarizer_agent,build_target)
+    msgs.extend(build_msgs)
+    # Step 4: Only run executables if build succeeded
+    if success:
+        executables = find_executables(execute_dir)
+        if not executables:
+            msgs.append(f" No executables found in {execute_dir}")
+        else:
+            msgs.append(f" Found executables: {executables}")
+            exe_msgs = run_executables(executables, execute_dir)
+            msgs.extend(exe_msgs)
 
-        return "\n".join(msgs)
-    else:
-        os.makedirs(directory, exist_ok=True)
-        filepath = os.path.join(directory, filename)
+    return "\n".join(msgs)
 
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(code)
 
-        return f"Code saved successfully to {filepath}"
+def save_code_to_file(code: str, filename: str, directory: str) -> str:
+    """Save code to a file in the specified directory."""
+    os.makedirs(directory, exist_ok=True)
+    filepath = os.path.join(directory, filename)
 
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(code)
+
+    return f"Code saved successfully to {filepath}"
 
 class ContextManagedGroupChat(autogen.GroupChat):
     """GroupChat with automatic context management"""
@@ -503,7 +504,7 @@ class MultiAgentTestOrchestrator:
                  review_agent_prompt: str = "",
                  test_coordinator_prompt: str = "",
                  execute_dir: str = '',
-                 build_file: str = '',
+                 build_target: str = '',
                  build_dir: str = ''):
         self.output_dir = output_dir
         self.max_retries = max_retries
@@ -516,7 +517,7 @@ class MultiAgentTestOrchestrator:
         self.test_coordinator_prompt = test_coordinator_prompt
         self.execute_dir=execute_dir
         self.build=build
-        self.build_file=build_file
+        self.build_target=build_target
         self.build_dir=build_dir
         # check if source code dir exists
         if not os.path.exists(INPUT_DIR):
@@ -547,32 +548,30 @@ class MultiAgentTestOrchestrator:
                                                     work_dir=output_dir)
                 },
             )
-        else:
+        elif build:
             def wrapped_save_code(code: str, filename: str) -> str:
-                return save_code_to_file(
+                return build_code_to_file(
                     code=code,
                     filename=filename,
                     directory=self.output_dir,
                     build=self.build,
                     execute_dir=self.execute_dir,
-                    build_file=self.build_file,
+                    build_target=self.build_target,
                     build_dir=self.build_dir,
                 )
 
             self.runner_agent = autogen.ConversableAgent(
-                name="TestFileSaveAgent",
+                name="TestBuildAndExecuteProxy",
                 system_message=f"""
-                    You are a **File Manager Agent**.
+                    You are a **File saver, compiler and Executor agent**.
 
                     Your job is to:
-                    <important> first check the self.build and if the build is true then run the build using the function if flase then just save this.
-                    1. Read existing test files in the provided directory {output_dir}.
-                    2. Preserve existing tests and formatting.
-                    3. After saving, run the Ninja build system to compile the updated file, The build is currently {self.build}. If it is true Also if build is true take the {build_dir} from above and save the file, if false just save.
+                    1. Preserve existing tests and formatting. Save all the files generated including header files if any generated.
+                    2. After saving, run the Ninja build system to compile the updated file.
+                    3. For building use the build target= {build_target} provided from above.
                     4. If the build is true and successfully built execute the executable generated at {execute_dir}.
-                    5. For building use the {build_file} provided from above.
-                    6. Make sure in filename use just the filename without whole path while calling the function.
-
+                    5. Make sure in filename use just the filename without whole path while calling the function.
+                    6. If errors then after the summarizer agent in function has summerized the error command the TestGenerationAgent to generate new code and then review agent will review it.
                 """,
                 llm_config={"config_list": config_list},  # keep your previous LLM configs
                 human_input_mode="NEVER",
@@ -586,6 +585,20 @@ class MultiAgentTestOrchestrator:
                 name="save_code",
                 description="Save the provided code into the given filename, then build and run if build is true."
             )(wrapped_save_code)
+        else:
+            self.runner_agent = autogen.ConversableAgent(
+                name="TestFileSaveAgent",
+                system_message="""You are a file manager. Your job is to save code to files when requested.
+                When you receive reviewed code, save it to the specified directory with an appropriate filename.""",
+                llm_config={"config_list": config_list},
+                human_input_mode="NEVER",
+                max_consecutive_auto_reply=2
+            )
+
+            self.runner_agent.register_for_execution(name="save_code")(save_code_to_file)
+            self.runner_agent.register_for_llm(name="save_code", description=f"Save code to a file to the path mentioned in {output_dir}. Do not change/modify the path where the output files should be saved. the Directory value when making the tool call should always be the value of {output_dir}")(save_code_to_file)
+
+            
         # Create a coordinator agent to manage the conversation
         self.coordinator = autogen.UserProxyAgent(
             name="TestCoordinator",
@@ -1102,7 +1115,7 @@ class MultiAgentTestOrchestrator:
 def run_test_automation(test_plan_path: str,
                        build: bool,
                        execute_dir: str,
-                       build_file: str,
+                       build_target: str,
                        build_dir: str,
                        output_dir: str = "generated_tests",
                        max_retries: int = 20,
@@ -1158,7 +1171,7 @@ def run_test_automation(test_plan_path: str,
             test_coordinator_prompt=test_coordinator_prompt,
             build=build,
             execute_dir=execute_dir,
-            build_file=build_file,
+            build_target=build_target,
             build_dir=build_dir,
         )
 
