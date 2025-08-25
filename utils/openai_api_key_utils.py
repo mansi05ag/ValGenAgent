@@ -67,8 +67,8 @@ def generate_new_api_key_windows():
         }
         data = {
             "grant_type": "client_credentials",
-            "client_id": "4ef1b24a-d699-4118-b1ff-4d0428932883",
-            "client_secret": "jgK8Q~Z56BnoZN8n2t9VBt5L_6T7HFd.RyIJdaJm"
+            "client_id": "13807c4e-0025-4bc7-86ad-bcb0f8fa6a73",
+            "client_secret": "Kzv8Q~ykJ5-dnjWU2d8HzQM0rEE5tdGvUX.88cvW"
         }
 
         proxies = {
@@ -130,7 +130,7 @@ def generate_new_api_key_linux():
         curl_command = [
             "bash", "-c",
             'no_proxy="" && NO_PROXY="" && response=$(curl -X POST "https://apis-internal.intel.com/v1/auth/token" '
-            '-d "grant_type=client_credentials&client_id=4ef1b24a-d699-4118-b1ff-4d0428932883&client_secret=jgK8Q~Z56BnoZN8n2t9VBt5L_6T7HFd.RyIJdaJm" '
+            '-d "grant_type=client_credentials&client_id=13807c4e-0025-4bc7-86ad-bcb0f8fa6a73&client_secret=Kzv8Q~ykJ5-dnjWU2d8HzQM0rEE5tdGvUX.88cvW" '
             '-H "Content-Type: application/x-www-form-urlencoded") && echo "$response"'
         ]
 
