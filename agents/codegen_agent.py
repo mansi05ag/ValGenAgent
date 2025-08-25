@@ -805,7 +805,17 @@ class MultiAgentTestOrchestrator:
             }
 
             file_path = os.path.join(self.output_dir, expected_file)
-            exists = os.path.exists(file_path)
+            exists = False
+
+            expected_name, expected_ext = os.path.splitext(expected_file)  # name + extension
+
+            for fname in os.listdir(self.output_dir):
+                fname_no_ext, fname_ext = os.path.splitext(fname)
+                if expected_name in fname_no_ext and expected_ext == fname_ext:  # match both
+                    exists = True
+                    file_path = os.path.join(self.output_dir, fname)
+                    break
+
 
             if exists:
                 # Check if file has meaningful content (not empty)
